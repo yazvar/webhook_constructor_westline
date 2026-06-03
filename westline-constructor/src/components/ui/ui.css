@@ -1,0 +1,249 @@
+/* ============================================================
+   Shared UI primitives — Nothing OS flavoured controls.
+   ============================================================ */
+
+/* ---- Buttons ---------------------------------------------- */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-elevated);
+  color: var(--text);
+  padding: 9px 16px;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  transition: border-color 0.15s, background 0.15s, color 0.15s, transform 0.05s;
+}
+.ui-btn:hover {
+  border-color: var(--text-dim);
+}
+.ui-btn:active {
+  transform: translateY(1px);
+}
+.ui-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.ui-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+.ui-btn--primary:hover {
+  background: #e22730;
+  border-color: #e22730;
+}
+.ui-btn--ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text-dim);
+}
+.ui-btn--ghost:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+.ui-btn--block {
+  width: 100%;
+}
+
+/* Small square icon button */
+.ui-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1;
+  transition: border-color 0.15s, color 0.15s;
+}
+.ui-iconbtn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+.ui-iconbtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.ui-iconbtn--danger:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+
+/* ---- Fields ----------------------------------------------- */
+.ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ui-field__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ui-field__label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.ui-field__counter {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.ui-field__counter--over {
+  color: var(--accent);
+}
+
+.ui-input,
+.ui-textarea {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 10px 12px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ui-input::placeholder,
+.ui-textarea::placeholder {
+  color: var(--text-faint);
+}
+.ui-input:focus,
+.ui-textarea:focus {
+  outline: none;
+  border-color: var(--accent-line);
+  background: #181818;
+}
+.ui-textarea {
+  resize: vertical;
+  min-height: 96px;
+  line-height: 1.5;
+}
+.ui-input--mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+/* ---- Checkbox --------------------------------------------- */
+.ui-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.ui-check input {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  background: var(--bg-input);
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+}
+.ui-check input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.ui-check input:checked::after {
+  content: '';
+  width: 5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translateY(-1px);
+}
+
+/* ---- Color field ------------------------------------------ */
+.ui-color {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ui-color__swatch {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: none;
+  cursor: pointer;
+}
+.ui-color__swatch::-webkit-color-swatch-wrapper {
+  padding: 3px;
+}
+.ui-color__swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
+/* ---- Collapsible ------------------------------------------ */
+.ui-collapse {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+.ui-collapse__head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  text-align: left;
+}
+.ui-collapse__head:hover {
+  background: var(--bg-elevated);
+}
+.ui-collapse__chev {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  transition: transform 0.18s;
+}
+.ui-collapse__chev--open {
+  transform: rotate(90deg);
+  color: var(--accent);
+}
+.ui-collapse__title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  flex: 1;
+}
+.ui-collapse__body {
+  padding: 4px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+}

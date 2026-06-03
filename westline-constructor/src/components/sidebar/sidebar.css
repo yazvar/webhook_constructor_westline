@@ -1,0 +1,189 @@
+/* ============================================================
+   Left sidebar — preset library + settings entry
+   ============================================================ */
+
+.sidebar {
+  width: 268px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  position: sticky;
+  top: 18px;
+  height: calc(100vh - 36px);
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sidebar__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sidebar__logo {
+  display: grid;
+  grid-template-columns: repeat(3, 5px);
+  grid-auto-rows: 5px;
+  gap: 3px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.sidebar__logo i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.sidebar__logo i:nth-child(5) {
+  background: var(--accent);
+}
+.sidebar__head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.sidebar__brand {
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
+.sidebar__close {
+  display: none;
+}
+
+.sidebar__list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.sidebar__hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  padding: 8px 2px;
+}
+
+/* ---- Preset row ------------------------------------------- */
+.preset {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.preset--active {
+  border-color: var(--accent-line);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.preset__main {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 12px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.preset__main:hover {
+  background: var(--bg-elevated);
+}
+.preset__name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.preset__meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.preset__rename {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--accent-line);
+  background: var(--bg-elevated);
+  color: var(--text);
+  padding: 10px 12px;
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+.preset__rename:focus {
+  outline: none;
+}
+.preset__actions {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px 8px;
+}
+.preset__actions .ui-iconbtn {
+  width: 26px;
+  height: 26px;
+  font-size: 12px;
+}
+
+/* ---- Settings entry --------------------------------------- */
+.sidebar__settings {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  padding: 11px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: color 0.15s, border-color 0.15s;
+}
+.sidebar__settings:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+.sidebar__settings-ico {
+  font-size: 15px;
+}
+
+/* ---- Mobile drawer ---------------------------------------- */
+.sidebar__backdrop {
+  display: none;
+}
+
+@media (max-width: 1080px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    border-radius: 0;
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+  }
+  .sidebar--open {
+    transform: translateX(0);
+  }
+  .sidebar__close {
+    display: inline-flex;
+  }
+  .sidebar__backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 50;
+  }
+}

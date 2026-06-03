@@ -1,0 +1,183 @@
+/* ============================================================
+   App shell & layout
+   ============================================================ */
+
+.app-shell {
+  max-width: 1640px;
+  margin: 0 auto;
+  padding: 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.app {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.app-header__menu {
+  display: none;
+}
+
+/* ---- Header ----------------------------------------------- */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 2px;
+}
+.app-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.app-header__glyph {
+  display: grid;
+  grid-template-columns: repeat(3, 6px);
+  grid-auto-rows: 6px;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #000;
+}
+.app-header__glyph i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.app-header__glyph i:nth-child(5) {
+  background: var(--accent);
+}
+.app-header__glyph i:nth-child(1),
+.app-header__glyph i:nth-child(9) {
+  background: var(--text-dim);
+}
+.app-header__title {
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
+.app-header__sub {
+  margin-top: 4px;
+}
+.app-header__ver {
+  align-self: flex-start;
+}
+
+/* ---- Webhook bar ------------------------------------------ */
+.webhookbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.webhookbar__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.webhookbar__field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.webhookbar__row--meta {
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.webhookbar__tools {
+  display: flex;
+  gap: 8px;
+}
+.webhookbar__status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  text-align: right;
+  flex: 1;
+  min-width: 160px;
+}
+.webhookbar__status--success {
+  color: #3ba55d;
+}
+.webhookbar__status--error {
+  color: var(--accent);
+}
+.webhookbar__status--sending {
+  color: var(--text-dim);
+}
+
+/* ---- Two-column workspace --------------------------------- */
+.app__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.app__col {
+  min-width: 0;
+}
+/* Stretch the preview column to the full row height so the sticky
+   preview inside can travel the whole length of the editor. */
+.app__col--preview {
+  align-self: stretch;
+  height: 100%;
+}
+
+/* ---- Footer ----------------------------------------------- */
+.app__footer {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  margin-top: 6px;
+}
+
+@media (max-width: 1080px) {
+  .app-shell {
+    padding: 14px;
+  }
+  .app-header__menu {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 960px) {
+  .app__grid {
+    grid-template-columns: 1fr;
+  }
+  .preview {
+    position: static;
+    max-height: none;
+  }
+  .dc {
+    max-height: 70vh;
+  }
+}
+
+@media (max-width: 560px) {
+  .app {
+    padding: 16px 14px 40px;
+  }
+  .webhookbar__row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

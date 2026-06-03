@@ -1,0 +1,108 @@
+/* ============================================================
+   Editor column layout
+   ============================================================ */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  border-radius: var(--radius-lg);
+}
+
+.panel__head {
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel__title {
+  font-size: 22px;
+  line-height: 1;
+  margin-top: 6px;
+  color: var(--text);
+}
+
+.panel__body {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.editor__empty {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-faint);
+  padding: 8px 0;
+}
+
+.editor__embeds {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* shared layout helpers used by the editors */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.grid-2--align {
+  align-items: center;
+}
+
+.group {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  margin: 0;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.group legend {
+  padding: 0 6px;
+}
+
+.embed-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* fields inside an embed */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.field-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.field-row__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.field-row__actions {
+  display: flex;
+  gap: 6px;
+}
+
+@media (max-width: 560px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

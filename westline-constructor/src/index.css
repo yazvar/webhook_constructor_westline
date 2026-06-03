@@ -1,0 +1,164 @@
+/* ============================================================
+   WESTLINE · Global theme
+   Inspired by Nothing OS — monochrome grid, dot-matrix type,
+   single red signal accent.
+   ============================================================ */
+
+:root {
+  /* Surfaces */
+  --bg: #0a0a0a;
+  --bg-panel: #121212;
+  --bg-elevated: #1a1a1a;
+  --bg-input: #161616;
+
+  /* Lines / borders */
+  --line: #262626;
+  --line-strong: #383838;
+
+  /* Text */
+  --text: #ededed;
+  --text-dim: #8a8a8a;
+  --text-faint: #5a5a5a;
+
+  /* Signal accent (Nothing red) */
+  --accent: #d71921;
+  --accent-dim: rgba(215, 25, 33, 0.16);
+  --accent-line: rgba(215, 25, 33, 0.5);
+
+  /* Discord brand (used inside the preview only) */
+  --discord-bg: #313338;
+  --discord-bg-2: #2b2d31;
+  --discord-text: #dbdee1;
+  --discord-muted: #949ba4;
+  --discord-link: #00a8fc;
+  --discord-blurple: #5865f2;
+
+  /* Type */
+  --font-display: 'Doto', 'Space Mono', monospace;
+  --font-body: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, monospace;
+
+  /* Geometry */
+  --radius: 4px;
+  --radius-lg: 8px;
+
+  color-scheme: dark;
+  font-family: var(--font-body);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis: none;
+  transition: background 0.2s, color 0.2s;
+}
+
+/* ---- Theme: pure black ------------------------------------ */
+:root[data-theme='black'] {
+  --bg: #000000;
+  --bg-panel: #0a0a0a;
+  --bg-elevated: #141414;
+  --bg-input: #0d0d0d;
+  --line: #1c1c1c;
+  --line-strong: #2c2c2c;
+}
+
+/* ---- Theme: light ----------------------------------------- */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f4f4f2;
+  --bg-panel: #ffffff;
+  --bg-elevated: #f0f0ee;
+  --bg-input: #f7f7f5;
+  --line: #e1e1dd;
+  --line-strong: #cfcfca;
+  --text: #161616;
+  --text-dim: #6a6a66;
+  --text-faint: #9a9a95;
+}
+
+/* ---- Dotted grid toggle ----------------------------------- */
+:root[data-grid='off'] body {
+  background-image: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  /* faint dotted grid texture, the Nothing signature */
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--line) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: -11px -11px;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 600;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 0;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Dot-matrix label helper used across the app */
+.dotmatrix {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
