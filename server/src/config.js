@@ -10,9 +10,16 @@ function required(name) {
   return v || '';
 }
 
+function normalizeUrl(raw) {
+  let url = (raw || 'http://localhost:3001').trim().replace(/\/$/, '');
+  // Tolerate PUBLIC_URL set without a scheme (common Railway mistake).
+  if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`;
+  return url;
+}
+
 const config = {
   port: Number(process.env.PORT || 3001),
-  publicUrl: (process.env.PUBLIC_URL || 'http://localhost:3001').replace(/\/$/, ''),
+  publicUrl: normalizeUrl(process.env.PUBLIC_URL),
   discordClientId: required('DISCORD_CLIENT_ID'),
   discordClientSecret: required('DISCORD_CLIENT_SECRET'),
   jwtSecret: process.env.JWT_SECRET || 'dev-insecure-secret-change-me',
