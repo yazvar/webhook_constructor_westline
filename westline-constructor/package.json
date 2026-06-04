@@ -12,9 +12,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "app:dev": "concurrently -k -n VITE,ELECTRON -c magenta,cyan \"vite --port 5180 --strictPort --host 127.0.0.1\" \"wait-on http://127.0.0.1:5180 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5180 electron .\"",
-    "app:build": "vite build && electron-builder",
-    "app:build:dir": "vite build && electron-builder --dir",
-    "app:publish": "vite build && electron-builder --publish always"
+    "app:build": "vite build && electron-builder --config.directories.output=C:/WestlineBuild",
+    "app:build:dir": "vite build && electron-builder --dir --config.directories.output=C:/WestlineBuild",
+    "app:publish": "vite build && electron-builder --publish always --config.directories.output=C:/WestlineBuild"
   },
   "dependencies": {
     "electron-updater": "^6.6.2",
