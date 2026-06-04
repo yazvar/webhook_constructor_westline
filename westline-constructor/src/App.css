@@ -68,7 +68,118 @@
   margin-top: 4px;
 }
 .app-header__ver {
-  align-self: flex-start;
+  align-self: center;
+}
+
+/* ---- Header right side (account / admin) ------------------ */
+.app-header__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.app-header__admin {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.app-header__admin:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.app-header__admin-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.usermenu {
+  position: relative;
+}
+.usermenu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 5px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+}
+.usermenu__trigger:hover {
+  border-color: var(--line-strong);
+}
+.usermenu__ava {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bg-input);
+  object-fit: cover;
+}
+.usermenu__name {
+  font-size: 13px;
+  font-weight: 600;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.usermenu__pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  min-width: 200px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.usermenu__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.usermenu__head-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+.usermenu__head-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.usermenu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 11px 14px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+}
+.usermenu__item:hover {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+@media (max-width: 560px) {
+  .usermenu__name {
+    display: none;
+  }
 }
 
 /* ---- Webhook bar ------------------------------------------ */

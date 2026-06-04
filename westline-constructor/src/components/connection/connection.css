@@ -1,0 +1,49 @@
+.conn {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.conn__card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px;
+  text-align: center;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.conn__icon {
+  font-size: 30px;
+  color: var(--accent);
+  animation: conn-flicker 1.4s infinite;
+}
+@keyframes conn-flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.conn__title {
+  font-size: 20px;
+  margin: 0;
+}
+.conn__text {
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}

@@ -7,7 +7,15 @@ import './sidebar.css';
  * Left navigation: list of saved presets with load / save / rename /
  * duplicate / delete, plus an entry to the settings drawer.
  */
-export function Sidebar({ presetsApi, activeId, setActiveId, onOpenSettings, onClose, open = false }) {
+export function Sidebar({
+  presetsApi,
+  activeId,
+  setActiveId,
+  onOpenSettings,
+  onClose,
+  open = false,
+  sharedPresets = [],
+}) {
   const { message, dispatch } = useMessage();
   const { presets, loading, create, update, remove } = presetsApi;
   const [editingId, setEditingId] = useState(null);
@@ -16,6 +24,12 @@ export function Sidebar({ presetsApi, activeId, setActiveId, onOpenSettings, onC
   const loadPreset = (preset) => {
     dispatch({ type: 'REPLACE', message: preset.message });
     setActiveId(preset.id);
+    onClose?.();
+  };
+
+  const loadShared = (preset) => {
+    dispatch({ type: 'REPLACE', message: { ...message, ...preset.message } });
+    setActiveId(`shared:${preset.id}`);
     onClose?.();
   };
 
@@ -140,6 +154,32 @@ export function Sidebar({ presetsApi, activeId, setActiveId, onOpenSettings, onC
           );
         })}
       </div>
+
+      {sharedPresets.length > 0 && (
+        <div className="sidebar__shared">
+          <div className="sidebar__shared-head">
+            <span className="eyebrow">Общие пресеты</span>
+            <span className="sidebar__shared-badge">{sharedPresets.length}</span>
+          </div>
+          {sharedPresets.map((preset) => {
+            const active = activeId === `shared:${preset.id}`;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                className={`preset preset--shared${active ? ' preset--active' : ''}`}
+                onClick={() => loadShared(preset)}
+                title="Загрузить общий пресет"
+              >
+                <span className="preset__name">{preset.name}</span>
+                <span className="preset__meta">
+                  {preset.message?.embeds?.length || 0} эмбед(ов) · live
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <button type="button" className="sidebar__settings" onClick={onOpenSettings}>
         <span className="sidebar__settings-ico">⚙</span>

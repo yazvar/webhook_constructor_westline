@@ -1,0 +1,109 @@
+/* ---- Login / auth gate ------------------------------------ */
+.login {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.login__card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 32px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.login__glyph {
+  display: grid;
+  grid-template-columns: repeat(3, 8px);
+  grid-auto-rows: 8px;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.login__glyph i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.login__glyph i:nth-child(5) {
+  background: var(--accent);
+}
+
+.login__title {
+  font-size: 30px;
+  margin: 0;
+}
+.login__sub {
+  margin: 0;
+}
+.login__lead {
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 14px 0 6px;
+}
+.login__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.login__error {
+  color: var(--accent);
+  font-size: 13px;
+  margin-top: 4px;
+}
+.login__note {
+  color: var(--text-faint);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+/* ---- Splash (auth loading) -------------------------------- */
+.splash {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  gap: 14px;
+}
+.splash__dots {
+  display: flex;
+  gap: 8px;
+}
+.splash__dots i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  animation: splash-pulse 1s infinite ease-in-out;
+}
+.splash__dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.splash__dots i:nth-child(3) {
+  animation-delay: 0.3s;
+  background: var(--accent);
+}
+@keyframes splash-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+}
+.splash__text {
+  color: var(--text-faint);
+}
