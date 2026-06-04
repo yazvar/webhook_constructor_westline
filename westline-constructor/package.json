@@ -48,7 +48,8 @@
       {
         "provider": "github",
         "owner": "yazvar",
-        "repo": "webhook_constructor_westline"
+        "repo": "webhook_constructor_westline",
+        "releaseType": "release"
       }
     ],
     "files": [
