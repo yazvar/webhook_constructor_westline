@@ -31,6 +31,19 @@ const config = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
+  // When true, only admins and whitelisted Discord IDs may use the app.
+  inviteOnly: process.env.INVITE_ONLY === 'true',
+  // Reject API calls from older desktop builds (semver, e.g. "1.0.3"). Empty = disabled.
+  minClientVersion: (process.env.MIN_CLIENT_VERSION || '').trim(),
+  // Seed whitelist on startup (comma-separated Discord IDs).
+  seedWhitelistIds: (process.env.WHITELIST_IDS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+  // When true, users need an active subscription (from a one-time code) to use the app.
+  subscriptionRequired: process.env.SUBSCRIPTION_REQUIRED === 'true',
+  // Default subscription length granted by a single-use code.
+  subscriptionDays: Math.max(1, Number(process.env.SUBSCRIPTION_DAYS || 30)),
 };
 
 config.redirectUri = `${config.publicUrl}/auth/discord/callback`;

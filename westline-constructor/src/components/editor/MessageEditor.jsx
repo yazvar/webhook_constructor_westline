@@ -29,7 +29,7 @@ export function MessageEditor() {
             <Input
               label="Аватар (URL)"
               value={message.avatarUrl}
-              placeholder="https://"
+              placeholder="https://… (только ссылка, не вставка картинки)"
               onChange={(v) => set('avatarUrl', v)}
             />
           </div>

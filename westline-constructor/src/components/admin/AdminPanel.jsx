@@ -7,6 +7,7 @@ import './admin.css';
 
 const TABS = [
   { id: 'users', label: 'Пользователи' },
+  { id: 'access', label: 'Доступ' },
   { id: 'presets', label: 'Пресеты' },
   { id: 'broadcast', label: 'Объявление' },
 ];
@@ -20,8 +21,14 @@ function timeAgo(ts) {
   return `${Math.floor(s / 86400)} дн назад`;
 }
 
+function formatSubscription(sub) {
+  if (!sub) return '—';
+  if (sub.permanent) return 'бессрочно';
+  if (!sub.active) return 'истекла';
+  return `${sub.daysLeft} дн.`;
+}
+
 /**
- * Admin drawer — visible only to admins (gated in the Header).
  * Tabs: registered users (+ ban/online), shared live presets
  * (create from the current draft / delete) and an announcement
  * broadcast to every connected client.
@@ -36,6 +43,11 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
   const [presetName, setPresetName] = useState('');
   const [announce, setAnnounce] = useState('');
   const [toast, setToast] = useState(null);
+  const [whitelist, setWhitelist] = useState([]);
+  const [invites, setInvites] = useState([]);
+  const [subCodes, setSubCodes] = useState([]);
+  const [newWhitelistId, setNewWhitelistId] = useState('');
+  const [inviteUses, setInviteUses] = useState('1');
 
   const flash = useCallback((text) => {
     setToast(text);
@@ -55,9 +67,31 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
     }
   }, [flash]);
 
+  const loadAccess = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [w, i, s] = await Promise.all([
+        api('/api/whitelist'),
+        api('/api/invites'),
+        api('/api/subscription-codes'),
+      ]);
+      setWhitelist(w);
+      setInvites(i);
+      setSubCodes(s);
+    } catch {
+      flash('Не удалось загрузить доступ');
+    } finally {
+      setLoading(false);
+    }
+  }, [flash]);
+
   useEffect(() => {
-    if (open) loadUsers();
-  }, [open, loadUsers]);
+    if (open) {
+      if (tab === 'access') loadAccess();
+      else loadUsers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, tab]);
 
   // Live refresh when the roster/presence changes.
   useEffect(() => {
@@ -113,6 +147,78 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
       flash('Ошибка отправки');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const addWhitelist = async () => {
+    const discordId = newWhitelistId.trim();
+    if (!discordId) return;
+    setBusy(true);
+    try {
+      await api('/api/whitelist', { method: 'POST', body: { discordId } });
+      setNewWhitelistId('');
+      loadAccess();
+      flash('Пользователь добавлен в whitelist');
+    } catch {
+      flash('Не удалось добавить');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeWhitelist = async (discordId) => {
+    try {
+      await api(`/api/whitelist/${discordId}`, { method: 'DELETE' });
+      loadAccess();
+    } catch {
+      flash('Не удалось удалить');
+    }
+  };
+
+  const createInvite = async () => {
+    setBusy(true);
+    try {
+      const row = await api('/api/invites', {
+        method: 'POST',
+        body: { usesLeft: Number(inviteUses) || 1 },
+      });
+      loadAccess();
+      flash(`Код: ${row.code}`);
+    } catch (err) {
+      flash(err.message || 'Не удалось создать код');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteInvite = async (code) => {
+    try {
+      await api(`/api/invites/${encodeURIComponent(code)}`, { method: 'DELETE' });
+      loadAccess();
+    } catch {
+      flash('Не удалось удалить код');
+    }
+  };
+
+  const createSubCode = async () => {
+    setBusy(true);
+    try {
+      const row = await api('/api/subscription-codes', { method: 'POST', body: {} });
+      loadAccess();
+      flash(`Код подписки: ${row.code}`);
+    } catch (err) {
+      flash(err.message || 'Не удалось создать код');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteSubCode = async (code) => {
+    try {
+      await api(`/api/subscription-codes/${encodeURIComponent(code)}`, { method: 'DELETE' });
+      loadAccess();
+    } catch {
+      flash('Не удалось удалить код');
     }
   };
 
@@ -189,7 +295,8 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
                       {u.isAdmin && <span className="admin-user__badge">ADMIN</span>}
                     </span>
                     <span className="admin-user__meta">
-                      @{u.username} · был {timeAgo(u.lastSeen)}
+                      @{u.username} · подписка: {formatSubscription(u.subscription)} · был{' '}
+                      {timeAgo(u.lastSeen)}
                     </span>
                     <span className="admin-user__id">{u.id}</span>
                   </div>
@@ -202,6 +309,114 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
                       {u.banned ? '↺' : '⊘'}
                     </IconButton>
                   )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tab === 'access' && (
+            <div className="admin__access">
+              <div className="admin__create">
+                <p className="admin__hint">
+                  Одноразовый код подписки — 30 дней доступа. После использования код сгорает.
+                </p>
+                <Button variant="primary" block onClick={createSubCode} disabled={busy}>
+                  {busy ? 'Создание…' : '+ Создать код подписки (1 месяц)'}
+                </Button>
+              </div>
+
+              <div className="admin__row-head">
+                <span>Коды подписки ({subCodes.length})</span>
+                <IconButton title="Обновить" onClick={loadAccess}>
+                  ↻
+                </IconButton>
+              </div>
+              {loading && <p className="admin__hint">Загрузка…</p>}
+              {subCodes.length === 0 && !loading && (
+                <p className="admin__hint">Активных кодов пока нет.</p>
+              )}
+              {subCodes.map((row) => (
+                <div key={row.code} className="admin-preset">
+                  <div className="admin-preset__info">
+                    <span className="admin-preset__name">{row.code}</span>
+                    <span className="admin-preset__meta">
+                      {row.used
+                        ? `использован · ${row.usedBy || '—'}`
+                        : `${row.durationDays} дн. · свободен`}
+                      {' · '}
+                      {timeAgo(row.createdAt)}
+                    </span>
+                  </div>
+                  {!row.used && (
+                    <IconButton danger title="Удалить код" onClick={() => deleteSubCode(row.code)}>
+                      ✕
+                    </IconButton>
+                  )}
+                </div>
+              ))}
+
+              <div className="admin__create" style={{ marginTop: 20 }}>
+                <Input
+                  label="Discord ID для whitelist"
+                  value={newWhitelistId}
+                  onChange={setNewWhitelistId}
+                  placeholder="123456789012345678"
+                />
+                <Button variant="primary" block onClick={addWhitelist} disabled={busy}>
+                  Добавить в whitelist
+                </Button>
+              </div>
+
+              <div className="admin__row-head">
+                <span>Whitelist ({whitelist.length})</span>
+                <IconButton title="Обновить" onClick={loadAccess}>
+                  ↻
+                </IconButton>
+              </div>
+              {loading && <p className="admin__hint">Загрузка…</p>}
+              {whitelist.length === 0 && !loading && (
+                <p className="admin__hint">Whitelist пуст — при INVITE_ONLY=true никто не войдёт без кода.</p>
+              )}
+              {whitelist.map((row) => (
+                <div key={row.discordId} className="admin-preset">
+                  <div className="admin-preset__info">
+                    <span className="admin-preset__name">{row.discordId}</span>
+                    <span className="admin-preset__meta">
+                      {row.addedBy || '—'} · {timeAgo(row.createdAt)}
+                    </span>
+                  </div>
+                  <IconButton danger title="Убрать из whitelist" onClick={() => removeWhitelist(row.discordId)}>
+                    ✕
+                  </IconButton>
+                </div>
+              ))}
+
+              <div className="admin__create" style={{ marginTop: 16 }}>
+                <Input
+                  label="Использований инвайт-кода"
+                  value={inviteUses}
+                  onChange={setInviteUses}
+                  placeholder="1"
+                />
+                <Button variant="primary" block onClick={createInvite} disabled={busy}>
+                  {busy ? 'Создание…' : '+ Создать инвайт-код'}
+                </Button>
+              </div>
+
+              <div className="admin__row-head">
+                <span>Инвайт-коды ({invites.length})</span>
+              </div>
+              {invites.map((row) => (
+                <div key={row.code} className="admin-preset">
+                  <div className="admin-preset__info">
+                    <span className="admin-preset__name">{row.code}</span>
+                    <span className="admin-preset__meta">
+                      осталось {row.usesLeft} · {timeAgo(row.createdAt)}
+                    </span>
+                  </div>
+                  <IconButton danger title="Удалить код" onClick={() => deleteInvite(row.code)}>
+                    ✕
+                  </IconButton>
                 </div>
               ))}
             </div>

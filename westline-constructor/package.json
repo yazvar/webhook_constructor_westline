@@ -1,7 +1,7 @@
 {
   "name": "westline-constructor",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.5",
   "type": "module",
   "description": "Конструктор сообщений для Discord-вебхуков в стиле Nothing OS.",
   "author": "Westline",
@@ -34,6 +34,8 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
+    "javascript-obfuscator": "^5.4.3",
+    "rollup-plugin-obfuscator": "^1.1.0",
     "vite": "^8.0.12",
     "wait-on": "^9.0.10"
   },
@@ -60,7 +62,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "signAndEditExecutable": false

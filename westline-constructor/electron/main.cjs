@@ -31,8 +31,12 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      devTools: isDev,
     },
   });
+
+  hardenWindow(mainWindow);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http')) shell.openExternal(url);
@@ -51,6 +55,32 @@ function createWindow() {
   });
 }
 
+/** Production-only guards: no DevTools, no inspect shortcuts, no external navigation. */
+function hardenWindow(win) {
+  if (isDev) return;
+
+  win.webContents.on('devtools-opened', () => {
+    win.webContents.closeDevTools();
+  });
+
+  win.webContents.on('before-input-event', (event, input) => {
+    const key = input.key?.toLowerCase?.() || '';
+    const block =
+      key === 'f12' ||
+      (input.control && input.shift && ['i', 'j', 'c'].includes(key)) ||
+      (input.control && key === 'u');
+    if (block) event.preventDefault();
+  });
+
+  win.webContents.on('context-menu', (event) => {
+    event.preventDefault();
+  });
+
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file://')) event.preventDefault();
+  });
+}
+
 /* ---- Discord OAuth via loopback ----------------------------- */
 /*
    Renderer asks us to log in. We spin up a tiny local server on an
@@ -60,7 +90,7 @@ function createWindow() {
    browser back to our loopback URL with ?token=<jwt>, which we then
    forward to the renderer.
 */
-function startLogin(backendUrl) {
+function startLogin(backendUrl, inviteCode) {
   closeLoopback();
 
   return new Promise((resolve, reject) => {
@@ -86,7 +116,9 @@ function startLogin(backendUrl) {
     loopbackServer.listen(0, '127.0.0.1', () => {
       const { port } = loopbackServer.address();
       const redirect = `http://127.0.0.1:${port}/cb`;
-      const authUrl = `${backendUrl.replace(/\/$/, '')}/auth/discord?redirect=${encodeURIComponent(redirect)}`;
+      const params = new URLSearchParams({ redirect });
+      if (inviteCode) params.set('invite', inviteCode);
+      const authUrl = `${backendUrl.replace(/\/$/, '')}/auth/discord?${params.toString()}`;
       shell.openExternal(authUrl);
       resolve({ port });
     });
@@ -118,9 +150,9 @@ h1{letter-spacing:.06em;text-transform:uppercase}.a{color:#d71921}p{color:#8a8a8
 </div></body></html>`;
 }
 
-ipcMain.handle('auth:login', async (_e, backendUrl) => {
+ipcMain.handle('auth:login', async (_e, backendUrl, inviteCode) => {
   try {
-    await startLogin(backendUrl);
+    await startLogin(backendUrl, inviteCode);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: String(err) };

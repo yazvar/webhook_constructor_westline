@@ -73,31 +73,52 @@ function trimmed(value) {
   return (value || '').trim();
 }
 
+/** Discord accepts only http(s) links — not data: URIs or pasted image blobs. */
+export function isHttpUrl(url) {
+  const t = trimmed(url);
+  if (!t) return false;
+  try {
+    const u = new URL(t);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function invalidUrlHint(value) {
+  const t = trimmed(value);
+  if (!t) return null;
+  if (t.startsWith('data:')) {
+    return 'вставьте прямую HTTPS-ссылку на картинку (Discord не принимает base64 и вставку из буфера)';
+  }
+  return 'укажите корректную ссылку, начинающуюся с https://';
+}
+
 /** Strip empty sub-objects so we don't send blank fields to Discord. */
 function buildEmbedPayload(embed) {
   const out = {};
   if (trimmed(embed.title)) out.title = embed.title.trim();
   if (trimmed(embed.description)) out.description = embed.description;
-  if (trimmed(embed.url)) out.url = embed.url.trim();
+  if (isHttpUrl(embed.url)) out.url = embed.url.trim();
 
   const color = hexToInt(embed.color);
   if (color !== null) out.color = color;
 
   if (trimmed(embed.author.name)) {
     out.author = { name: embed.author.name.trim() };
-    if (trimmed(embed.author.url)) out.author.url = embed.author.url.trim();
-    if (trimmed(embed.author.iconUrl))
+    if (isHttpUrl(embed.author.url)) out.author.url = embed.author.url.trim();
+    if (isHttpUrl(embed.author.iconUrl))
       out.author.icon_url = embed.author.iconUrl.trim();
   }
 
   if (trimmed(embed.footer.text)) {
     out.footer = { text: embed.footer.text.trim() };
-    if (trimmed(embed.footer.iconUrl))
+    if (isHttpUrl(embed.footer.iconUrl))
       out.footer.icon_url = embed.footer.iconUrl.trim();
   }
 
-  if (trimmed(embed.image.url)) out.image = { url: embed.image.url.trim() };
-  if (trimmed(embed.thumbnail.url))
+  if (isHttpUrl(embed.image.url)) out.image = { url: embed.image.url.trim() };
+  if (isHttpUrl(embed.thumbnail.url))
     out.thumbnail = { url: embed.thumbnail.url.trim() };
 
   if (embed.timestamp) out.timestamp = new Date().toISOString();
@@ -121,7 +142,7 @@ export function buildPayload(message) {
   const payload = {};
   if (trimmed(message.content)) payload.content = message.content;
   if (trimmed(message.username)) payload.username = message.username.trim();
-  if (trimmed(message.avatarUrl)) payload.avatar_url = message.avatarUrl.trim();
+  if (isHttpUrl(message.avatarUrl)) payload.avatar_url = message.avatarUrl.trim();
 
   const embeds = message.embeds
     .map(buildEmbedPayload)
@@ -129,6 +150,34 @@ export function buildPayload(message) {
   if (embeds.length) payload.embeds = embeds;
 
   return payload;
+}
+
+function collectUrlErrors(message) {
+  const errors = [];
+  const n = (i) => i + 1;
+
+  if (trimmed(message.avatarUrl) && !isHttpUrl(message.avatarUrl)) {
+    errors.push(`Аватар: ${invalidUrlHint(message.avatarUrl)}.`);
+  }
+
+  message.embeds.forEach((embed, i) => {
+    const label = `Эмбед #${n(i)}`;
+    const checks = [
+      ['Ссылка заголовка', embed.url],
+      ['Ссылка автора', embed.author?.url],
+      ['Иконка автора', embed.author?.iconUrl],
+      ['Картинка', embed.image?.url],
+      ['Превью', embed.thumbnail?.url],
+      ['Иконка подвала', embed.footer?.iconUrl],
+    ];
+    for (const [field, url] of checks) {
+      if (trimmed(url) && !isHttpUrl(url)) {
+        errors.push(`${label}, ${field}: ${invalidUrlHint(url)}.`);
+      }
+    }
+  });
+
+  return errors;
 }
 
 /** Returns an array of human-readable validation problems. */
@@ -144,6 +193,7 @@ export function validateMessage(message) {
   if ((message.content || '').length > LIMITS.content) {
     errors.push(`Текст превышает ${LIMITS.content} символов.`);
   }
+  errors.push(...collectUrlErrors(message));
   message.embeds.forEach((embed, i) => {
     const total =
       (embed.title || '').length +
@@ -159,6 +209,28 @@ export function validateMessage(message) {
     }
   });
   return errors;
+}
+
+function formatDiscordApiError(data) {
+  if (!data || typeof data !== 'object') return '';
+  const parts = [];
+  if (data.message) parts.push(data.message);
+  if (data.errors && typeof data.errors === 'object') {
+    const walk = (obj, prefix = '') => {
+      for (const [key, val] of Object.entries(obj)) {
+        const path = prefix ? `${prefix}.${key}` : key;
+        if (val && typeof val === 'object' && '_errors' in val) {
+          for (const e of val._errors) {
+            if (e?.message) parts.push(`${path}: ${e.message}`);
+          }
+        } else if (val && typeof val === 'object') {
+          walk(val, path);
+        }
+      }
+    };
+    walk(data.errors);
+  }
+  return parts.join('; ');
 }
 
 /** POST the message to the webhook. Resolves on success, throws on failure. */
@@ -182,7 +254,8 @@ export async function sendToWebhook(message) {
     let detail = `HTTP ${res.status}`;
     try {
       const data = await res.json();
-      if (data && data.message) detail = `${detail} — ${data.message}`;
+      const extra = formatDiscordApiError(data);
+      if (extra) detail = `${detail} — ${extra}`;
     } catch {
       /* response had no JSON body */
     }

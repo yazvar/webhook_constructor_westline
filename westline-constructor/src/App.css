@@ -102,6 +102,33 @@
   background: currentColor;
 }
 
+.app-header__sub-badge {
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-dim);
+}
+.app-header__sub-badge--active {
+  border-color: #1a4d2e;
+  background: rgba(34, 120, 70, 0.12);
+  color: #6fcf97;
+}
+.app-header__sub-badge--warn {
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.app-header__sub-badge--expired {
+  border-color: #5c2020;
+  background: rgba(120, 34, 34, 0.15);
+  color: #e07070;
+}
+
 .usermenu {
   position: relative;
 }
@@ -160,6 +187,12 @@
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-faint);
+}
+.usermenu__head-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #6fcf97;
+  margin-top: 4px;
 }
 .usermenu__item {
   display: block;

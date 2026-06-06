@@ -42,7 +42,37 @@ db.exec(`
     created_at  INTEGER NOT NULL,
     updated_at  INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS whitelist (
+    discord_id  TEXT PRIMARY KEY,
+    added_by    TEXT,
+    created_at  INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS invite_codes (
+    code        TEXT PRIMARY KEY,
+    uses_left   INTEGER NOT NULL,
+    created_by  TEXT,
+    created_at  INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS subscription_codes (
+    code          TEXT PRIMARY KEY,
+    duration_days INTEGER NOT NULL DEFAULT 30,
+    used_by       TEXT,
+    used_at       INTEGER,
+    created_by    TEXT,
+    created_at    INTEGER NOT NULL
+  );
 `);
+
+for (const sql of ['ALTER TABLE users ADD COLUMN subscription_expires_at INTEGER']) {
+  try {
+    db.exec(sql);
+  } catch {
+    /* column already exists */
+  }
+}
 
 /* ---- Users ------------------------------------------------- */
 
@@ -90,6 +120,79 @@ const setBanStmt = db.prepare('UPDATE users SET banned = ? WHERE discord_id = ?'
 function setBanned(id, banned) {
   setBanStmt.run(banned ? 1 : 0, id);
   return getUser(id);
+}
+
+/* ---- Subscriptions ----------------------------------------- */
+
+const MS_DAY = 86400000;
+
+function hasActiveSubscription(id) {
+  const user = getUser(id);
+  if (!user?.subscription_expires_at) return false;
+  return user.subscription_expires_at > Date.now();
+}
+
+const setSubscriptionExpiryStmt = db.prepare(
+  'UPDATE users SET subscription_expires_at = ? WHERE discord_id = ?'
+);
+
+function extendSubscription(discordId, durationDays) {
+  const user = getUser(discordId);
+  const now = Date.now();
+  const base =
+    user?.subscription_expires_at && user.subscription_expires_at > now
+      ? user.subscription_expires_at
+      : now;
+  const expires = base + durationDays * MS_DAY;
+  setSubscriptionExpiryStmt.run(expires, String(discordId));
+  return expires;
+}
+
+const getSubCodeStmt = db.prepare('SELECT * FROM subscription_codes WHERE code = ?');
+const markSubCodeUsedStmt = db.prepare(`
+  UPDATE subscription_codes SET used_by = ?, used_at = ? WHERE code = ? AND used_by IS NULL
+`);
+
+function consumeSubscriptionCode(code, discordId) {
+  const normalized = String(code).trim().toUpperCase();
+  const row = getSubCodeStmt.get(normalized);
+  if (!row || row.used_by) return false;
+
+  return db.transaction(() => {
+    const info = markSubCodeUsedStmt.run(String(discordId), Date.now(), normalized);
+    if (!info.changes) return false;
+    extendSubscription(discordId, row.duration_days);
+    return true;
+  })();
+}
+
+const insertSubCodeStmt = db.prepare(`
+  INSERT INTO subscription_codes (code, duration_days, created_by, created_at)
+  VALUES (@code, @duration_days, @created_by, @created_at)
+`);
+
+function createSubscriptionCode({ code, durationDays = 30, createdBy = null }) {
+  const now = Date.now();
+  const normalized = String(code).trim().toUpperCase();
+  insertSubCodeStmt.run({
+    code: normalized,
+    duration_days: Math.max(1, Number(durationDays) || 30),
+    created_by: createdBy,
+    created_at: now,
+  });
+  return getSubCodeStmt.get(normalized);
+}
+
+const allSubCodesStmt = db.prepare(
+  'SELECT * FROM subscription_codes ORDER BY created_at DESC'
+);
+function allSubscriptionCodes() {
+  return allSubCodesStmt.all();
+}
+
+const deleteSubCodeStmt = db.prepare('DELETE FROM subscription_codes WHERE code = ?');
+function deleteSubscriptionCode(code) {
+  deleteSubCodeStmt.run(String(code).trim().toUpperCase());
 }
 
 /* ---- Presets ----------------------------------------------- */
@@ -159,6 +262,84 @@ function deletePreset(id) {
   deletePresetStmt.run(id);
 }
 
+/* ---- Whitelist / invite-only -------------------------------- */
+
+const isWhitelistedStmt = db.prepare('SELECT 1 FROM whitelist WHERE discord_id = ?');
+function isWhitelisted(id) {
+  return !!isWhitelistedStmt.get(String(id));
+}
+
+const insertWhitelistStmt = db.prepare(`
+  INSERT INTO whitelist (discord_id, added_by, created_at)
+  VALUES (@discord_id, @added_by, @created_at)
+  ON CONFLICT(discord_id) DO NOTHING
+`);
+function addToWhitelist(discordId, addedBy = null) {
+  insertWhitelistStmt.run({
+    discord_id: String(discordId),
+    added_by: addedBy,
+    created_at: Date.now(),
+  });
+  return isWhitelisted(String(discordId));
+}
+
+const removeWhitelistStmt = db.prepare('DELETE FROM whitelist WHERE discord_id = ?');
+function removeFromWhitelist(discordId) {
+  removeWhitelistStmt.run(String(discordId));
+}
+
+const allWhitelistStmt = db.prepare('SELECT * FROM whitelist ORDER BY created_at DESC');
+function allWhitelist() {
+  return allWhitelistStmt.all();
+}
+
+const getInviteStmt = db.prepare('SELECT * FROM invite_codes WHERE code = ?');
+const decrementInviteStmt = db.prepare(`
+  UPDATE invite_codes SET uses_left = uses_left - 1 WHERE code = ? AND uses_left > 0
+`);
+const deleteInviteIfEmptyStmt = db.prepare('DELETE FROM invite_codes WHERE code = ? AND uses_left <= 0');
+
+function consumeInviteCode(code, discordId) {
+  const row = getInviteStmt.get(String(code).trim());
+  if (!row || row.uses_left <= 0) return false;
+  const ok = db.transaction(() => {
+    decrementInviteStmt.run(row.code);
+    addToWhitelist(discordId, 'invite');
+    deleteInviteIfEmptyStmt.run(row.code);
+    return true;
+  })();
+  return ok;
+}
+
+const insertInviteStmt = db.prepare(`
+  INSERT INTO invite_codes (code, uses_left, created_by, created_at)
+  VALUES (@code, @uses_left, @created_by, @created_at)
+`);
+function createInviteCode({ code, usesLeft = 1, createdBy = null }) {
+  const now = Date.now();
+  insertInviteStmt.run({
+    code: String(code),
+    uses_left: Math.max(1, Number(usesLeft) || 1),
+    created_by: createdBy,
+    created_at: now,
+  });
+  return getInviteStmt.get(String(code));
+}
+
+const allInvitesStmt = db.prepare('SELECT * FROM invite_codes ORDER BY created_at DESC');
+function allInviteCodes() {
+  return allInvitesStmt.all();
+}
+
+const deleteInviteStmt = db.prepare('DELETE FROM invite_codes WHERE code = ?');
+function deleteInviteCode(code) {
+  deleteInviteStmt.run(String(code));
+}
+
+function seedWhitelist(ids) {
+  for (const id of ids) addToWhitelist(id, 'seed');
+}
+
 module.exports = {
   db,
   upsertUser,
@@ -171,4 +352,19 @@ module.exports = {
   createPreset,
   updatePreset,
   deletePreset,
+  isWhitelisted,
+  addToWhitelist,
+  removeFromWhitelist,
+  allWhitelist,
+  consumeInviteCode,
+  createInviteCode,
+  allInviteCodes,
+  deleteInviteCode,
+  seedWhitelist,
+  hasActiveSubscription,
+  extendSubscription,
+  consumeSubscriptionCode,
+  createSubscriptionCode,
+  allSubscriptionCodes,
+  deleteSubscriptionCode,
 };

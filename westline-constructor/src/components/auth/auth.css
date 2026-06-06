@@ -67,6 +67,11 @@
   font-size: 12px;
   margin-top: 6px;
 }
+.login__note--code {
+  margin-top: -4px;
+  margin-bottom: 8px;
+  text-align: left;
+}
 
 /* ---- Splash (auth loading) -------------------------------- */
 .splash {

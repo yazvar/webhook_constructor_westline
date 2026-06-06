@@ -9,12 +9,20 @@ import { API_URL, isDesktop } from '../config';
  *    main process pushes the JWT back through 'auth:token'
  *  - web: full-page redirect to the backend, token arrives as ?token=
  * Persists the token and resolves the current user via /api/me.
+ * Periodically re-checks /api/me so expired subscriptions log the user out.
  */
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [status, setStatus] = useState('loading'); // loading | anon | authed | error
   const [error, setError] = useState(null);
   const handled = useRef(false);
+
+  const forceLogout = useCallback((message) => {
+    setToken(null);
+    setUser(null);
+    setStatus('anon');
+    if (message) setError(message);
+  }, []);
 
   const loadMe = useCallback(async () => {
     if (!getToken()) {
@@ -25,17 +33,16 @@ export function AuthProvider({ children }) {
       const me = await api('/api/me');
       setUser(me);
       setStatus('authed');
+      setError(null);
     } catch (err) {
-      if (err.status === 401 || err.status === 403) {
-        setToken(null);
-        setUser(null);
-        setStatus('anon');
+      if (err.status === 401 || err.status === 403 || err.status === 426) {
+        forceLogout(err.message);
       } else {
         setStatus('error');
         setError(err.message);
       }
     }
-  }, []);
+  }, [forceLogout]);
 
   const acceptToken = useCallback(
     (token) => {
@@ -68,23 +75,45 @@ export function AuthProvider({ children }) {
     return window.westline.onAuthToken((token) => acceptToken(token));
   }, [acceptToken]);
 
-  const login = useCallback(async () => {
+  // Re-check session every minute (catches expired subscriptions server-side).
+  useEffect(() => {
+    if (status !== 'authed') return undefined;
+    const id = setInterval(() => loadMe(), 60_000);
+    return () => clearInterval(id);
+  }, [status, loadMe]);
+
+  // Log out exactly when subscription expires (client-side timer).
+  useEffect(() => {
+    const sub = user?.subscription;
+    if (status !== 'authed' || !sub || sub.permanent || !sub.expiresAt) return undefined;
+    const ms = sub.expiresAt - Date.now();
+    if (ms <= 0) {
+      forceLogout('Подписка закончилась — войдите с новым кодом');
+      return undefined;
+    }
+    const t = setTimeout(() => {
+      loadMe();
+    }, ms + 500);
+    return () => clearTimeout(t);
+  }, [user, status, loadMe, forceLogout]);
+
+  const login = useCallback(async (accessCode) => {
     setError(null);
+    const code = accessCode?.trim() || '';
     if (isDesktop && window.westline?.login) {
-      const r = await window.westline.login(API_URL);
+      const r = await window.westline.login(API_URL, code);
       if (!r?.ok) setError(r?.error || 'Не удалось открыть окно входа');
       return;
     }
-    // Web fallback: redirect back to this page with the token attached.
     const redirect = window.location.origin + window.location.pathname;
-    window.location.href = `${API_URL}/auth/discord?redirect=${encodeURIComponent(redirect)}`;
+    const params = new URLSearchParams({ redirect });
+    if (code) params.set('invite', code);
+    window.location.href = `${API_URL}/auth/discord?${params.toString()}`;
   }, []);
 
   const logout = useCallback(() => {
-    setToken(null);
-    setUser(null);
-    setStatus('anon');
-  }, []);
+    forceLogout(null);
+  }, [forceLogout]);
 
   const value = useMemo(
     () => ({ user, status, error, login, logout, refresh: loadMe }),

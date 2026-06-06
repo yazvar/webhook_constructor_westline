@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/authStore';
+import { fetchAccessInfo } from '../../utils/api';
 import { Button } from '../ui/Button';
+import { Input } from '../ui/Field';
 import './auth.css';
 
 const DiscordMark = () => (
@@ -11,6 +14,25 @@ const DiscordMark = () => (
 /** Full-screen sign-in gate shown to anonymous users. */
 export function LoginScreen() {
   const { login, error } = useAuth();
+  const [access, setAccess] = useState({ subscriptionRequired: false, inviteOnly: false });
+  const [code, setCode] = useState('');
+
+  useEffect(() => {
+    fetchAccessInfo().then((info) =>
+      setAccess({
+        subscriptionRequired: !!info.subscriptionRequired,
+        inviteOnly: !!info.inviteOnly,
+      })
+    );
+  }, []);
+
+  const needsCode = access.subscriptionRequired || access.inviteOnly;
+  const codeLabel = access.subscriptionRequired ? 'Код подписки' : 'Инвайт-код';
+  const codeHint = access.subscriptionRequired
+    ? 'Одноразовый код на 30 дней доступа. Если подписка ещё активна — поле можно оставить пустым.'
+    : 'Код от администратора';
+
+  const onLogin = () => login(code);
 
   return (
     <div className="login">
@@ -24,11 +46,25 @@ export function LoginScreen() {
         <p className="eyebrow login__sub">Discord Webhook Constructor</p>
 
         <p className="login__lead">
-          Войдите через Discord, чтобы получить доступ к конструктору,
-          общим пресетам и синхронизации.
+          {access.subscriptionRequired
+            ? 'Войдите через Discord. Новым пользователям нужен одноразовый код подписки.'
+            : 'Войдите через Discord, чтобы получить доступ к конструктору, общим пресетам и синхронизации.'}
         </p>
 
-        <Button variant="primary" block className="login__btn" onClick={login}>
+        {needsCode && (
+          <>
+            <Input
+              label={codeLabel}
+              value={code}
+              onChange={setCode}
+              placeholder="XXXXXXXX"
+              mono
+            />
+            <p className="login__note login__note--code">{codeHint}</p>
+          </>
+        )}
+
+        <Button variant="primary" block className="login__btn" onClick={onLogin}>
           <DiscordMark />
           <span>Войти через Discord</span>
         </Button>

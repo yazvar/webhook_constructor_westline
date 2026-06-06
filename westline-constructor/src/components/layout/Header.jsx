@@ -1,11 +1,20 @@
 import { useState } from 'react';
+import { APP_VERSION, isDesktop } from '../../config';
 import { IconButton } from '../ui/Button';
 
-const APP_VERSION = window.westline?.isDesktop ? 'desktop' : 'web';
+function subscriptionLabel(sub) {
+  if (!sub || sub.permanent) return null;
+  if (!sub.active) return { text: 'Подписка неактивна', tone: 'expired' };
+  const days = sub.daysLeft;
+  const word = days === 1 ? 'день' : days >= 2 && days <= 4 ? 'дня' : 'дней';
+  return { text: `Подписка · ${days} ${word}`, tone: days <= 3 ? 'warn' : 'active' };
+}
 
 /** App header — the Nothing-style brand block + user/account controls. */
 export function Header({ onMenu, user, isAdmin, onOpenAdmin, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const sub = subscriptionLabel(user?.subscription);
+  const platform = isDesktop ? 'desktop' : 'web';
 
   return (
     <header className="app-header">
@@ -25,6 +34,12 @@ export function Header({ onMenu, user, isAdmin, onOpenAdmin, onLogout }) {
       </div>
 
       <div className="app-header__right">
+        {sub && (
+          <span className={`app-header__sub-badge app-header__sub-badge--${sub.tone}`} title={sub.text}>
+            {sub.text}
+          </span>
+        )}
+
         {isAdmin && (
           <button type="button" className="app-header__admin" onClick={onOpenAdmin}>
             <span className="app-header__admin-dot" />
@@ -48,6 +63,7 @@ export function Header({ onMenu, user, isAdmin, onOpenAdmin, onLogout }) {
                 <div className="usermenu__head">
                   <span className="usermenu__head-name">{user.globalName || user.username}</span>
                   <span className="usermenu__head-id">{user.id}</span>
+                  {sub && <span className="usermenu__head-sub">{sub.text}</span>}
                 </div>
                 <button type="button" className="usermenu__item" onClick={onLogout}>
                   Выйти
@@ -57,7 +73,9 @@ export function Header({ onMenu, user, isAdmin, onOpenAdmin, onLogout }) {
           </div>
         )}
 
-        <span className="app-header__ver eyebrow">v1.0 · {APP_VERSION}</span>
+        <span className="app-header__ver eyebrow">
+          v{APP_VERSION} · {platform}
+        </span>
       </div>
     </header>
   );

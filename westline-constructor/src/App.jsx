@@ -7,7 +7,6 @@ import { usePresets } from './hooks/usePresets';
 import { useConnection } from './hooks/useConnection';
 import { useUpdater } from './hooks/useUpdater';
 import { useLive } from './hooks/useLive';
-import { isAdminId } from './config';
 import { Header } from './components/layout/Header';
 import { WebhookBar } from './components/layout/WebhookBar';
 import { MessageEditor } from './components/editor/MessageEditor';
@@ -25,7 +24,7 @@ import './App.css';
 /** The authenticated workspace (constructor + live sync + admin). */
 function Workspace({ user }) {
   const presetsApi = usePresets();
-  const isAdmin = isAdminId(user.id) && user.isAdmin;
+  const isAdmin = !!user.isAdmin;
   const { sharedPresets, announcement, usersRev, reloadPresets } = useLive({ enabled: true });
   const { logout } = useAuth();
 

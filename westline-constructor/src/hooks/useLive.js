@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, getToken } from '../utils/api';
-import { API_URL } from '../config';
+import { API_URL, APP_VERSION } from '../config';
 
 /**
  * Realtime sync with the backend over Server-Sent Events.
@@ -34,7 +34,11 @@ export function useLive({ enabled }) {
     const connect = () => {
       const token = getToken();
       if (!token || closed) return;
-      const es = new EventSource(`${API_URL}/api/events?token=${encodeURIComponent(token)}`);
+      const qs = new URLSearchParams({
+        token,
+        clientVersion: APP_VERSION,
+      });
+      const es = new EventSource(`${API_URL}/api/events?${qs.toString()}`);
       esRef.current = es;
 
       es.addEventListener('ready', () => setConnected(true));

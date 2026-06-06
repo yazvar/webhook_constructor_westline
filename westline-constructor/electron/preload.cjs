@@ -21,7 +21,7 @@ contextBridge.exposeInMainWorld('westline', {
   getVersion: () => ipcRenderer.invoke('app:version'),
 
   // --- auth ---
-  login: (backendUrl) => ipcRenderer.invoke('auth:login', backendUrl),
+  login: (backendUrl, inviteCode) => ipcRenderer.invoke('auth:login', backendUrl, inviteCode),
   onAuthToken: (cb) => on('auth:token', cb),
 
   // --- updates ---

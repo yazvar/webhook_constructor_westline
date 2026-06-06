@@ -16,7 +16,8 @@ const cors = require('cors');
 
 const config = require('./config');
 const db = require('./db');
-const { signToken, requireAuth, requireAdmin, extractToken, verifyToken } = require('./auth');
+const { signToken, requireAuth, requireAdmin, extractToken, verifyToken, hasAccess, clientVersionError } = require('./auth');
+const { resolveLogin, accessDeniedMessage, getSubscriptionInfo } = require('./subscription');
 const events = require('./events');
 
 const app = express();
@@ -35,10 +36,14 @@ app.use(
 );
 
 /* ---- OAuth state store (short-lived, in memory) ------------- */
-const stateStore = new Map(); // state -> { redirect, expires }
-function rememberState(redirect) {
+const stateStore = new Map(); // state -> { redirect, invite, expires }
+function rememberState(redirect, invite) {
   const state = crypto.randomBytes(16).toString('hex');
-  stateStore.set(state, { redirect, expires: Date.now() + 10 * 60_000 });
+  stateStore.set(state, {
+    redirect,
+    invite: invite || null,
+    expires: Date.now() + 10 * 60_000,
+  });
   return state;
 }
 function consumeState(state) {
@@ -53,16 +58,26 @@ setInterval(() => {
   for (const [k, v] of stateStore) if (v.expires < now) stateStore.delete(k);
 }, 60_000).unref?.();
 
-/* ---- Health ------------------------------------------------- */
+/* ---- Health & public access info ----------------------------- */
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, time: Date.now() });
+});
+
+app.get('/api/access', (_req, res) => {
+  res.json({
+    inviteOnly: config.inviteOnly,
+    subscriptionRequired: config.subscriptionRequired,
+    subscriptionDays: config.subscriptionDays,
+    minClientVersion: config.minClientVersion || null,
+  });
 });
 
 /* ---- OAuth: start ------------------------------------------- */
 app.get('/auth/discord', (req, res) => {
   // `redirect` is the loopback URL the desktop app is listening on.
   const redirect = typeof req.query.redirect === 'string' ? req.query.redirect : '';
-  const state = rememberState(redirect);
+  const invite = typeof req.query.invite === 'string' ? req.query.invite.trim() : '';
+  const state = rememberState(redirect, invite);
 
   const params = new URLSearchParams({
     client_id: config.discordClientId,
@@ -104,10 +119,19 @@ app.get('/auth/discord/callback', async (req, res) => {
     if (!userRes.ok) throw new Error(`user fetch failed: ${userRes.status}`);
     const profile = await userRes.json();
 
+    const discordId = String(profile.id);
     const user = db.upsertUser(profile);
-    const token = signToken(user);
+    const login = resolveLogin(discordId, entry.invite);
+    if (!login.ok) {
+      return res
+        .status(403)
+        .send(renderResult('Доступ закрыт', accessDeniedMessage(login.reason)));
+    }
 
-    events.broadcast('user:joined', publicUser(user));
+    const fresh = db.getUser(discordId);
+    const token = signToken(fresh);
+
+    events.broadcast('user:joined', publicUser(fresh));
 
     // Hand the token back to the desktop app's loopback server.
     if (entry.redirect) {
@@ -126,7 +150,12 @@ app.get('/auth/discord/callback', async (req, res) => {
 /* ---- Current user ------------------------------------------- */
 app.get('/api/me', requireAuth, (req, res) => {
   db.touchUser(req.user.discord_id);
-  res.json({ ...publicUser(req.user), isAdmin: req.isAdmin });
+  const fresh = db.getUser(req.user.discord_id);
+  res.json({
+    ...publicUser(fresh),
+    isAdmin: req.isAdmin,
+    subscription: getSubscriptionInfo(fresh, req.isAdmin),
+  });
 });
 
 /* ---- Shared presets (everyone can read) --------------------- */
@@ -169,14 +198,18 @@ app.delete('/api/presets/:id', requireAuth, requireAdmin, (req, res) => {
 /* ---- Admin: users ------------------------------------------- */
 app.get('/api/users', requireAuth, requireAdmin, (_req, res) => {
   const online = events.onlineIds();
-  const users = db.allUsers().map((u) => ({
-    ...publicUser(u),
-    email: u.email,
-    loginCount: u.login_count,
-    banned: !!u.banned,
-    isAdmin: config.isAdmin(u.discord_id),
-    online: online.has(u.discord_id),
-  }));
+  const users = db.allUsers().map((u) => {
+    const isAdmin = config.isAdmin(u.discord_id);
+    return {
+      ...publicUser(u),
+      email: u.email,
+      loginCount: u.login_count,
+      banned: !!u.banned,
+      isAdmin,
+      subscription: getSubscriptionInfo(u, isAdmin),
+      online: online.has(u.discord_id),
+    };
+  });
   res.json(users);
 });
 
@@ -215,13 +248,124 @@ app.post('/api/announce', requireAuth, requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+/* ---- Admin: whitelist & invite codes ------------------------ */
+app.get('/api/whitelist', requireAuth, requireAdmin, (_req, res) => {
+  res.json(
+    db.allWhitelist().map((row) => ({
+      discordId: row.discord_id,
+      addedBy: row.added_by,
+      createdAt: row.created_at,
+    }))
+  );
+});
+
+app.post('/api/whitelist', requireAuth, requireAdmin, (req, res) => {
+  const discordId = req.body && req.body.discordId ? String(req.body.discordId).trim() : '';
+  if (!discordId) return res.status(400).json({ error: 'discord_id_required' });
+  db.addToWhitelist(discordId, req.user.discord_id);
+  res.status(201).json({ ok: true, discordId });
+});
+
+app.delete('/api/whitelist/:id', requireAuth, requireAdmin, (req, res) => {
+  if (config.isAdmin(req.params.id)) {
+    return res.status(400).json({ error: 'cannot_remove_admin' });
+  }
+  db.removeFromWhitelist(req.params.id);
+  res.json({ ok: true });
+});
+
+app.get('/api/invites', requireAuth, requireAdmin, (_req, res) => {
+  res.json(
+    db.allInviteCodes().map((row) => ({
+      code: row.code,
+      usesLeft: row.uses_left,
+      createdBy: row.created_by,
+      createdAt: row.created_at,
+    }))
+  );
+});
+
+app.post('/api/invites', requireAuth, requireAdmin, (req, res) => {
+  const usesLeft = req.body && req.body.usesLeft != null ? Number(req.body.usesLeft) : 1;
+  const custom = req.body && req.body.code ? String(req.body.code).trim() : '';
+  const code = custom || crypto.randomBytes(6).toString('hex').toUpperCase();
+  if (code.length < 4 || code.length > 32) {
+    return res.status(400).json({ error: 'invalid_code' });
+  }
+  try {
+    const row = db.createInviteCode({
+      code,
+      usesLeft,
+      createdBy: req.user.discord_id,
+    });
+    res.status(201).json({ code: row.code, usesLeft: row.uses_left, createdAt: row.created_at });
+  } catch {
+    res.status(409).json({ error: 'code_exists' });
+  }
+});
+
+app.delete('/api/invites/:code', requireAuth, requireAdmin, (req, res) => {
+  db.deleteInviteCode(req.params.code);
+  res.json({ ok: true });
+});
+
+/* ---- Admin: subscription codes (one-time, grants N days) ------ */
+app.get('/api/subscription-codes', requireAuth, requireAdmin, (_req, res) => {
+  res.json(
+    db.allSubscriptionCodes().map((row) => ({
+      code: row.code,
+      durationDays: row.duration_days,
+      usedBy: row.used_by,
+      usedAt: row.used_at,
+      createdBy: row.created_by,
+      createdAt: row.created_at,
+      used: !!row.used_by,
+    }))
+  );
+});
+
+app.post('/api/subscription-codes', requireAuth, requireAdmin, (req, res) => {
+  const custom = req.body && req.body.code ? String(req.body.code).trim() : '';
+  const code = custom || crypto.randomBytes(8).toString('hex').toUpperCase();
+  const durationDays =
+    req.body && req.body.durationDays != null
+      ? Number(req.body.durationDays)
+      : config.subscriptionDays;
+  if (code.length < 4 || code.length > 32) {
+    return res.status(400).json({ error: 'invalid_code' });
+  }
+  try {
+    const row = db.createSubscriptionCode({
+      code,
+      durationDays,
+      createdBy: req.user.discord_id,
+    });
+    res.status(201).json({
+      code: row.code,
+      durationDays: row.duration_days,
+      createdAt: row.created_at,
+    });
+  } catch {
+    res.status(409).json({ error: 'code_exists' });
+  }
+});
+
+app.delete('/api/subscription-codes/:code', requireAuth, requireAdmin, (req, res) => {
+  db.deleteSubscriptionCode(req.params.code);
+  res.json({ ok: true });
+});
+
 /* ---- Realtime stream (SSE) ---------------------------------- */
 app.get('/api/events', (req, res) => {
+  const versionErr = clientVersionError(req);
+  if (versionErr) return res.status(versionErr.status).json(versionErr.body);
+
   const token = extractToken(req);
   const payload = token && verifyToken(token);
   if (!payload) return res.status(401).end();
   const user = db.getUser(payload.sub);
   if (!user || user.banned) return res.status(403).end();
+  if (!hasAccess(user.discord_id)) return res.status(403).end();
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -246,6 +390,14 @@ app.get('/api/events', (req, res) => {
 });
 
 /* ---- helpers ------------------------------------------------ */
+function defaultAvatarIndex(discordId) {
+  try {
+    return Number(BigInt(discordId) % 5n);
+  } catch {
+    return 0;
+  }
+}
+
 function publicUser(u) {
   return {
     id: u.discord_id,
@@ -254,7 +406,7 @@ function publicUser(u) {
     avatar: u.avatar,
     avatarUrl: u.avatar
       ? `https://cdn.discordapp.com/avatars/${u.discord_id}/${u.avatar}.png?size=128`
-      : `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(u.discord_id) % 5n)}.png`,
+      : `https://cdn.discordapp.com/embed/avatars/${defaultAvatarIndex(u.discord_id)}.png`,
     createdAt: u.created_at,
     lastSeen: u.last_seen,
   };
@@ -282,8 +434,17 @@ function renderResult(title, text, token) {
 }
 
 events.startHeartbeat();
+if (config.seedWhitelistIds.length) db.seedWhitelist(config.seedWhitelistIds);
 app.listen(config.port, () => {
   console.log(`[westline] backend on ${config.publicUrl} (port ${config.port})`);
   console.log(`[westline] redirect URI: ${config.redirectUri}`);
   console.log(`[westline] admins: ${config.adminIds.join(', ') || '(none)'}`);
+  console.log(`[westline] invite-only: ${config.inviteOnly}`);
+  console.log(`[westline] subscription required: ${config.subscriptionRequired}`);
+  if (config.subscriptionRequired) {
+    console.log(`[westline] subscription period: ${config.subscriptionDays} days`);
+  }
+  if (config.minClientVersion) {
+    console.log(`[westline] min client version: ${config.minClientVersion}`);
+  }
 });
