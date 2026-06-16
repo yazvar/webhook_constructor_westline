@@ -66,6 +66,11 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
     [allGuilds]
   );
 
+  const flash = useCallback((text) => {
+    setToast(text);
+    setTimeout(() => setToast(null), 2500);
+  }, []);
+
   const copyCode = useCallback(
     async (code) => {
       try {
@@ -77,11 +82,6 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
     },
     [flash]
   );
-
-  const flash = useCallback((text) => {
-    setToast(text);
-    setTimeout(() => setToast(null), 2500);
-  }, []);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);

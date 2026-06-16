@@ -1,7 +1,7 @@
 {
   "name": "westline-constructor",
   "private": true,
-  "version": "1.0.7",
+  "version": "1.0.8",
   "type": "module",
   "description": "Конструктор сообщений для Discord-вебхуков в стиле Nothing OS.",
   "author": "Westline",
