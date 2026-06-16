@@ -46,7 +46,14 @@ export function createEmbed() {
 
 export function createMessage() {
   return {
+    // Destination: either a manually-typed webhook URL ('url') or a channel
+    // picked via the bot ('channel'). channelId/guildId/channelLabel describe
+    // the latter so the dropdown can restore the selection after a refresh.
+    target: 'url', // 'url' | 'channel'
     webhookUrl: '',
+    channelId: '',
+    guildId: '',
+    channelLabel: '',
     username: '',
     avatarUrl: '',
     content: '',

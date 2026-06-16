@@ -18,6 +18,7 @@ const config = require('./config');
 const db = require('./db');
 const { signToken, requireAuth, requireAdmin, extractToken, verifyToken, hasAccess, clientVersionError } = require('./auth');
 const { resolveLogin, accessDeniedMessage, getSubscriptionInfo } = require('./subscription');
+const discord = require('./discord');
 const events = require('./events');
 
 const app = express();
@@ -69,7 +70,49 @@ app.get('/api/access', (_req, res) => {
     subscriptionRequired: config.subscriptionRequired,
     subscriptionDays: config.subscriptionDays,
     minClientVersion: config.minClientVersion || null,
+    channelPicker: discord.isEnabled(),
   });
+});
+
+/* ---- Discord channel picker (bot-powered) ------------------- */
+function discordError(res, err) {
+  const status = err && err.status ? err.status : 500;
+  const code =
+    status === 503
+      ? 'bot_not_configured'
+      : status === 429
+        ? 'discord_rate_limited'
+        : 'discord_error';
+  return res.status(status).json({ error: code, detail: err && err.message });
+}
+
+app.get('/api/discord/guilds', requireAuth, async (_req, res) => {
+  try {
+    res.json(await discord.listGuilds());
+  } catch (err) {
+    discordError(res, err);
+  }
+});
+
+app.get('/api/discord/guilds/:id/channels', requireAuth, async (req, res) => {
+  try {
+    res.json(await discord.listChannels(req.params.id));
+  } catch (err) {
+    discordError(res, err);
+  }
+});
+
+app.post('/api/discord/resolve-webhook', requireAuth, async (req, res) => {
+  const channelId = req.body && req.body.channelId ? String(req.body.channelId).trim() : '';
+  if (!/^\d+$/.test(channelId)) {
+    return res.status(400).json({ error: 'channel_id_required' });
+  }
+  try {
+    const url = await discord.getOrCreateWebhook(channelId);
+    res.json({ channelId, url });
+  } catch (err) {
+    discordError(res, err);
+  }
 });
 
 /* ---- OAuth: start ------------------------------------------- */
@@ -440,6 +483,7 @@ app.listen(config.port, () => {
   console.log(`[westline] redirect URI: ${config.redirectUri}`);
   console.log(`[westline] admins: ${config.adminIds.join(', ') || '(none)'}`);
   console.log(`[westline] invite-only: ${config.inviteOnly}`);
+  console.log(`[westline] channel picker (bot): ${discord.isEnabled() ? 'enabled' : 'disabled'}`);
   console.log(`[westline] subscription required: ${config.subscriptionRequired}`);
   if (config.subscriptionRequired) {
     console.log(`[westline] subscription period: ${config.subscriptionDays} days`);

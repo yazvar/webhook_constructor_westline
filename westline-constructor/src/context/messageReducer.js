@@ -10,7 +10,14 @@ export const initialMessage = createMessage();
 export function messageReducer(state, action) {
   switch (action.type) {
     case 'RESET':
-      return { ...createMessage(), webhookUrl: state.webhookUrl };
+      return {
+        ...createMessage(),
+        target: state.target,
+        webhookUrl: state.webhookUrl,
+        channelId: state.channelId,
+        guildId: state.guildId,
+        channelLabel: state.channelLabel,
+      };
 
     case 'REPLACE':
       return { ...createMessage(), ...action.message };

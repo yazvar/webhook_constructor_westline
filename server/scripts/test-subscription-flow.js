@@ -15,7 +15,7 @@ const config = require('../src/config');
 
 const BASE = `http://localhost:${config.port || 3001}`;
 const TEST_USER = `test-${crypto.randomBytes(4).toString('hex')}`;
-const CLIENT_VERSION = config.minClientVersion || '1.0.5';
+const CLIENT_VERSION = config.minClientVersion || '1.0.6';
 const ADMIN_ID = config.adminIds[0];
 
 const headers = (token) => ({

@@ -22,6 +22,10 @@ const config = {
   publicUrl: normalizeUrl(process.env.PUBLIC_URL),
   discordClientId: required('DISCORD_CLIENT_ID'),
   discordClientSecret: required('DISCORD_CLIENT_SECRET'),
+  // Bot token used to enumerate guild channels and create per-channel webhooks
+  // so the desktop app can pick a destination channel. Optional — when empty,
+  // the in-app channel picker is disabled and only manual webhook URLs work.
+  discordBotToken: (process.env.DISCORD_BOT_TOKEN || '').trim(),
   jwtSecret: process.env.JWT_SECRET || 'dev-insecure-secret-change-me',
   adminIds: (process.env.ADMIN_IDS || '')
     .split(',')

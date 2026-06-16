@@ -229,6 +229,43 @@
   gap: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
+.webhookbar__tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  align-self: flex-start;
+}
+.webhookbar__tab {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 6px 14px;
+  border-radius: calc(var(--radius) - 2px);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.webhookbar__tab:hover {
+  color: var(--text);
+}
+.webhookbar__tab.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+.webhookbar__picker {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+}
+.webhookbar__picker .webhookbar__field {
+  min-width: 0;
+}
 .webhookbar__row {
   display: flex;
   align-items: flex-end;
@@ -323,5 +360,8 @@
   .webhookbar__row {
     flex-direction: column;
     align-items: stretch;
+  }
+  .webhookbar__picker {
+    flex-direction: column;
   }
 }
