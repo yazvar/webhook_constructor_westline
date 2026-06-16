@@ -1,12 +1,14 @@
 'use strict';
 
 /* ============================================================
-   Discord bot helpers.
-   Uses the bot token (config.discordBotToken) to:
-     - list the guilds the bot is a member of
+   Discord bot helpers (multi-bot).
+   Uses one or many bot tokens (config.discordBotTokens) to:
+     - discover the guilds every bot is a member of and remember
+       which bot serves which guild (guild -> token index)
      - list the text channels of a guild (grouped by category)
      - get-or-create a reusable webhook for a channel
 
+   Adding a new project = drop its bot token in the hosting vars.
    The webhook URL is what the desktop client actually posts to,
    so per-message username/avatar overrides keep working.
    ============================================================ */
@@ -20,20 +22,20 @@ const WEBHOOK_NAME = 'Westline';
 const webhookCache = new Map();
 const WEBHOOK_TTL = 30 * 60_000; // 30 min
 
+/** guildId -> { id, name, iconUrl, token } built from every bot's guild list. */
+let guildIndex = null;
+let guildIndexExpires = 0;
+const GUILD_TTL = 5 * 60_000; // 5 min
+
 function isEnabled() {
-  return !!config.discordBotToken;
+  return config.discordBotTokens.length > 0;
 }
 
-async function botFetch(path, init = {}) {
-  if (!isEnabled()) {
-    const err = new Error('bot_not_configured');
-    err.status = 503;
-    throw err;
-  }
+async function botFetch(token, path, init = {}) {
   const res = await fetch(`${API}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bot ${config.discordBotToken}`,
+      Authorization: `Bot ${token}`,
       'Content-Type': 'application/json',
       ...(init.headers || {}),
     },
@@ -54,18 +56,54 @@ async function botFetch(path, init = {}) {
   return res.status === 204 ? null : res.json();
 }
 
-/** Guilds the bot is in: [{ id, name, iconUrl }]. */
-async function listGuilds() {
-  const guilds = await botFetch('/users/@me/guilds');
-  return (guilds || [])
-    .map((g) => ({
-      id: g.id,
-      name: g.name,
-      iconUrl: g.icon
-        ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=64`
-        : null,
-    }))
+function notConfigured() {
+  const err = new Error('bot_not_configured');
+  err.status = 503;
+  return err;
+}
+
+/** Build (and cache) the guild -> token index across all bots. */
+async function buildGuildIndex(force = false) {
+  if (!isEnabled()) throw notConfigured();
+  if (guildIndex && !force && guildIndexExpires > Date.now()) return guildIndex;
+
+  const map = new Map();
+  for (const token of config.discordBotTokens) {
+    try {
+      const guilds = await botFetch(token, '/users/@me/guilds');
+      for (const g of guilds || []) {
+        if (map.has(g.id)) continue; // first bot that has it wins
+        map.set(g.id, {
+          id: g.id,
+          name: g.name,
+          iconUrl: g.icon
+            ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=64`
+            : null,
+          token,
+        });
+      }
+    } catch (err) {
+      // A single bad/expired token shouldn't kill the whole index.
+      console.error('[discord] guild list failed for one bot:', err.message);
+    }
+  }
+  guildIndex = map;
+  guildIndexExpires = Date.now() + GUILD_TTL;
+  return guildIndex;
+}
+
+/** All guilds reachable by any bot: [{ id, name, iconUrl }] (no tokens). */
+async function listAllGuilds(force = false) {
+  const index = await buildGuildIndex(force);
+  return [...index.values()]
+    .map(({ id, name, iconUrl }) => ({ id, name, iconUrl }))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function tokenForGuild(guildId) {
+  const index = await buildGuildIndex();
+  const entry = index.get(String(guildId));
+  return entry ? entry.token : null;
 }
 
 // Channel types we can post a normal message into via a webhook.
@@ -77,7 +115,13 @@ const CATEGORY_TYPE = 4;
  * the way they appear in Discord (category position, then channel position).
  */
 async function listChannels(guildId) {
-  const channels = await botFetch(`/guilds/${guildId}/channels`);
+  const token = await tokenForGuild(guildId);
+  if (!token) {
+    const err = new Error('guild_not_available');
+    err.status = 404;
+    throw err;
+  }
+  const channels = await botFetch(token, `/guilds/${guildId}/channels`);
   const categories = new Map();
   for (const c of channels) {
     if (c.type === CATEGORY_TYPE) {
@@ -119,17 +163,24 @@ function cacheSet(channelId, url) {
 }
 
 /** Find an existing Westline webhook in the channel or create a fresh one. */
-async function getOrCreateWebhook(channelId) {
+async function getOrCreateWebhook(channelId, guildId) {
   const cached = cacheGet(channelId);
   if (cached) return cached;
 
-  const existing = await botFetch(`/channels/${channelId}/webhooks`);
+  const token = await tokenForGuild(guildId);
+  if (!token) {
+    const err = new Error('guild_not_available');
+    err.status = 404;
+    throw err;
+  }
+
+  const existing = await botFetch(token, `/channels/${channelId}/webhooks`);
   const mine = (existing || []).find(
     (w) => w.name === WEBHOOK_NAME && w.token
   );
   let hook = mine;
   if (!hook) {
-    hook = await botFetch(`/channels/${channelId}/webhooks`, {
+    hook = await botFetch(token, `/channels/${channelId}/webhooks`, {
       method: 'POST',
       body: JSON.stringify({ name: WEBHOOK_NAME }),
     });
@@ -146,7 +197,8 @@ async function getOrCreateWebhook(channelId) {
 
 module.exports = {
   isEnabled,
-  listGuilds,
+  listAllGuilds,
   listChannels,
   getOrCreateWebhook,
+  refreshGuilds: () => buildGuildIndex(true),
 };

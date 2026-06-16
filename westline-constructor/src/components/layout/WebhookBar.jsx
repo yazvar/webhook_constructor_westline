@@ -87,7 +87,7 @@ export function WebhookBar() {
 
   const onSend = () => {
     if (target === 'channel') {
-      send(message, () => resolveWebhook(message.channelId));
+      send(message, () => resolveWebhook(message.channelId, message.guildId));
     } else {
       send(message);
     }

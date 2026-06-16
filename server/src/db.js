@@ -64,9 +64,28 @@ db.exec(`
     created_by    TEXT,
     created_at    INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS groups (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    guild_ids   TEXT NOT NULL DEFAULT '[]',
+    created_by  TEXT,
+    created_at  INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS user_groups (
+    discord_id  TEXT NOT NULL,
+    group_id    TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (discord_id, group_id)
+  );
 `);
 
-for (const sql of ['ALTER TABLE users ADD COLUMN subscription_expires_at INTEGER']) {
+for (const sql of [
+  'ALTER TABLE users ADD COLUMN subscription_expires_at INTEGER',
+  'ALTER TABLE invite_codes ADD COLUMN group_id TEXT',
+  'ALTER TABLE subscription_codes ADD COLUMN group_id TEXT',
+]) {
   try {
     db.exec(sql);
   } catch {
@@ -162,16 +181,17 @@ function consumeSubscriptionCode(code, discordId) {
     const info = markSubCodeUsedStmt.run(String(discordId), Date.now(), normalized);
     if (!info.changes) return false;
     extendSubscription(discordId, row.duration_days);
+    if (row.group_id) addUserToGroup(discordId, row.group_id);
     return true;
   })();
 }
 
 const insertSubCodeStmt = db.prepare(`
-  INSERT INTO subscription_codes (code, duration_days, created_by, created_at)
-  VALUES (@code, @duration_days, @created_by, @created_at)
+  INSERT INTO subscription_codes (code, duration_days, created_by, created_at, group_id)
+  VALUES (@code, @duration_days, @created_by, @created_at, @group_id)
 `);
 
-function createSubscriptionCode({ code, durationDays = 30, createdBy = null }) {
+function createSubscriptionCode({ code, durationDays = 30, createdBy = null, groupId = null }) {
   const now = Date.now();
   const normalized = String(code).trim().toUpperCase();
   insertSubCodeStmt.run({
@@ -179,6 +199,7 @@ function createSubscriptionCode({ code, durationDays = 30, createdBy = null }) {
     duration_days: Math.max(1, Number(durationDays) || 30),
     created_by: createdBy,
     created_at: now,
+    group_id: groupId || null,
   });
   return getSubCodeStmt.get(normalized);
 }
@@ -305,6 +326,7 @@ function consumeInviteCode(code, discordId) {
   const ok = db.transaction(() => {
     decrementInviteStmt.run(row.code);
     addToWhitelist(discordId, 'invite');
+    if (row.group_id) addUserToGroup(discordId, row.group_id);
     deleteInviteIfEmptyStmt.run(row.code);
     return true;
   })();
@@ -312,16 +334,17 @@ function consumeInviteCode(code, discordId) {
 }
 
 const insertInviteStmt = db.prepare(`
-  INSERT INTO invite_codes (code, uses_left, created_by, created_at)
-  VALUES (@code, @uses_left, @created_by, @created_at)
+  INSERT INTO invite_codes (code, uses_left, created_by, created_at, group_id)
+  VALUES (@code, @uses_left, @created_by, @created_at, @group_id)
 `);
-function createInviteCode({ code, usesLeft = 1, createdBy = null }) {
+function createInviteCode({ code, usesLeft = 1, createdBy = null, groupId = null }) {
   const now = Date.now();
   insertInviteStmt.run({
     code: String(code),
     uses_left: Math.max(1, Number(usesLeft) || 1),
     created_by: createdBy,
     created_at: now,
+    group_id: groupId || null,
   });
   return getInviteStmt.get(String(code));
 }
@@ -338,6 +361,149 @@ function deleteInviteCode(code) {
 
 function seedWhitelist(ids) {
   for (const id of ids) addToWhitelist(id, 'seed');
+}
+
+/* ---- Groups (server visibility per project) ----------------- */
+
+function rowToGroup(row) {
+  if (!row) return null;
+  let guildIds = [];
+  try {
+    guildIds = JSON.parse(row.guild_ids || '[]');
+  } catch {
+    guildIds = [];
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    guildIds: Array.isArray(guildIds) ? guildIds.map(String) : [],
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+  };
+}
+
+const allGroupsStmt = db.prepare('SELECT * FROM groups ORDER BY created_at ASC');
+const memberCountStmt = db.prepare(
+  'SELECT COUNT(*) AS n FROM user_groups WHERE group_id = ?'
+);
+function allGroups() {
+  return allGroupsStmt.all().map((row) => ({
+    ...rowToGroup(row),
+    memberCount: memberCountStmt.get(row.id).n,
+  }));
+}
+
+const getGroupStmt = db.prepare('SELECT * FROM groups WHERE id = ?');
+function getGroup(id) {
+  return rowToGroup(getGroupStmt.get(id));
+}
+
+const insertGroupStmt = db.prepare(`
+  INSERT INTO groups (id, name, guild_ids, created_by, created_at)
+  VALUES (@id, @name, @guild_ids, @created_by, @created_at)
+`);
+function createGroup({ id, name, guildIds = [], createdBy = null }) {
+  insertGroupStmt.run({
+    id,
+    name: String(name).slice(0, 80),
+    guild_ids: JSON.stringify((guildIds || []).map(String)),
+    created_by: createdBy,
+    created_at: Date.now(),
+  });
+  return getGroup(id);
+}
+
+const updateGroupStmt = db.prepare(
+  'UPDATE groups SET name = @name, guild_ids = @guild_ids WHERE id = @id'
+);
+function updateGroup(id, { name, guildIds }) {
+  const existing = getGroup(id);
+  if (!existing) return null;
+  updateGroupStmt.run({
+    id,
+    name: name != null ? String(name).slice(0, 80) : existing.name,
+    guild_ids: JSON.stringify(
+      (guildIds != null ? guildIds : existing.guildIds).map(String)
+    ),
+  });
+  return getGroup(id);
+}
+
+const deleteGroupStmt = db.prepare('DELETE FROM groups WHERE id = ?');
+const deleteGroupMembersStmt = db.prepare('DELETE FROM user_groups WHERE group_id = ?');
+const clearInviteGroupStmt = db.prepare(
+  'UPDATE invite_codes SET group_id = NULL WHERE group_id = ?'
+);
+const clearSubGroupStmt = db.prepare(
+  'UPDATE subscription_codes SET group_id = NULL WHERE group_id = ?'
+);
+function deleteGroup(id) {
+  db.transaction(() => {
+    deleteGroupMembersStmt.run(id);
+    clearInviteGroupStmt.run(id);
+    clearSubGroupStmt.run(id);
+    deleteGroupStmt.run(id);
+  })();
+}
+
+const addUserGroupStmt = db.prepare(`
+  INSERT INTO user_groups (discord_id, group_id, created_at)
+  VALUES (?, ?, ?)
+  ON CONFLICT(discord_id, group_id) DO NOTHING
+`);
+function addUserToGroup(discordId, groupId) {
+  if (!getGroup(groupId)) return false;
+  addUserGroupStmt.run(String(discordId), String(groupId), Date.now());
+  return true;
+}
+
+const removeUserGroupStmt = db.prepare(
+  'DELETE FROM user_groups WHERE discord_id = ? AND group_id = ?'
+);
+function removeUserFromGroup(discordId, groupId) {
+  removeUserGroupStmt.run(String(discordId), String(groupId));
+}
+
+const userGroupIdsStmt = db.prepare(
+  'SELECT group_id FROM user_groups WHERE discord_id = ?'
+);
+function getUserGroupIds(discordId) {
+  return userGroupIdsStmt.all(String(discordId)).map((r) => r.group_id);
+}
+
+const replaceUserGroupsTx = db.transaction((discordId, groupIds) => {
+  db.prepare('DELETE FROM user_groups WHERE discord_id = ?').run(String(discordId));
+  for (const gid of groupIds) addUserToGroup(discordId, gid);
+});
+function setUserGroups(discordId, groupIds = []) {
+  replaceUserGroupsTx(String(discordId), groupIds.map(String));
+  return getUserGroupIds(discordId);
+}
+
+/**
+ * What a user is allowed to see in the channel picker.
+ * Returns { groupCount, guildIds } where guildIds is the union across the
+ * user's groups. Callers decide what an empty-group user sees.
+ */
+function getUserVisibility(discordId) {
+  const groupIds = getUserGroupIds(discordId);
+  const guildIds = new Set();
+  for (const gid of groupIds) {
+    const g = getGroup(gid);
+    if (g) for (const id of g.guildIds) guildIds.add(id);
+  }
+  return { groupCount: groupIds.length, guildIds: [...guildIds] };
+}
+
+/** Map of discordId -> [groupId] for a batch of users (admin roster). */
+function groupsByUser() {
+  const rows = db.prepare('SELECT discord_id, group_id FROM user_groups').all();
+  const map = new Map();
+  for (const r of rows) {
+    if (!map.has(r.discord_id)) map.set(r.discord_id, []);
+    map.get(r.discord_id).push(r.group_id);
+  }
+  return map;
 }
 
 module.exports = {
@@ -367,4 +533,15 @@ module.exports = {
   createSubscriptionCode,
   allSubscriptionCodes,
   deleteSubscriptionCode,
+  allGroups,
+  getGroup,
+  createGroup,
+  updateGroup,
+  deleteGroup,
+  addUserToGroup,
+  removeUserFromGroup,
+  getUserGroupIds,
+  setUserGroups,
+  getUserVisibility,
+  groupsByUser,
 };

@@ -61,10 +61,10 @@ export function useChannels() {
     [channelsByGuild]
   );
 
-  const resolveWebhook = useCallback(async (channelId) => {
+  const resolveWebhook = useCallback(async (channelId, guildId) => {
     const data = await api('/api/discord/resolve-webhook', {
       method: 'POST',
-      body: { channelId },
+      body: { channelId, guildId },
     });
     return data && data.url;
   }, []);

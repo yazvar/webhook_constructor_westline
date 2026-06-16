@@ -86,15 +86,42 @@ function discordError(res, err) {
   return res.status(status).json({ error: code, detail: err && err.message });
 }
 
-app.get('/api/discord/guilds', requireAuth, async (_req, res) => {
+/** What servers the requester may see in the picker. */
+function visibilityFor(req) {
+  if (req.isAdmin) return { all: true, guildIds: new Set() };
+  const { groupCount, guildIds } = db.getUserVisibility(req.user.discord_id);
+  if (groupCount === 0) return { all: !config.groupsStrict, guildIds: new Set() };
+  return { all: false, guildIds: new Set(guildIds.map(String)) };
+}
+
+function canSeeGuild(req, guildId) {
+  const v = visibilityFor(req);
+  return v.all || v.guildIds.has(String(guildId));
+}
+
+app.get('/api/discord/guilds', requireAuth, async (req, res) => {
   try {
-    res.json(await discord.listGuilds());
+    const all = await discord.listAllGuilds();
+    const v = visibilityFor(req);
+    res.json(v.all ? all : all.filter((g) => v.guildIds.has(g.id)));
+  } catch (err) {
+    discordError(res, err);
+  }
+});
+
+// All servers reachable by any bot — for binding servers to groups (admin).
+app.get('/api/discord/all-guilds', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    res.json(await discord.listAllGuilds(true));
   } catch (err) {
     discordError(res, err);
   }
 });
 
 app.get('/api/discord/guilds/:id/channels', requireAuth, async (req, res) => {
+  if (!canSeeGuild(req, req.params.id)) {
+    return res.status(403).json({ error: 'guild_forbidden' });
+  }
   try {
     res.json(await discord.listChannels(req.params.id));
   } catch (err) {
@@ -104,15 +131,73 @@ app.get('/api/discord/guilds/:id/channels', requireAuth, async (req, res) => {
 
 app.post('/api/discord/resolve-webhook', requireAuth, async (req, res) => {
   const channelId = req.body && req.body.channelId ? String(req.body.channelId).trim() : '';
-  if (!/^\d+$/.test(channelId)) {
+  const guildId = req.body && req.body.guildId ? String(req.body.guildId).trim() : '';
+  if (!/^\d+$/.test(channelId) || !/^\d+$/.test(guildId)) {
     return res.status(400).json({ error: 'channel_id_required' });
   }
+  if (!canSeeGuild(req, guildId)) {
+    return res.status(403).json({ error: 'guild_forbidden' });
+  }
   try {
-    const url = await discord.getOrCreateWebhook(channelId);
+    const url = await discord.getOrCreateWebhook(channelId, guildId);
     res.json({ channelId, url });
   } catch (err) {
     discordError(res, err);
   }
+});
+
+/* ---- Groups (admin) ----------------------------------------- */
+app.get('/api/groups', requireAuth, requireAdmin, (_req, res) => {
+  res.json(db.allGroups());
+});
+
+app.post('/api/groups', requireAuth, requireAdmin, (req, res) => {
+  const name = (req.body && req.body.name ? String(req.body.name) : '').trim();
+  if (!name) return res.status(400).json({ error: 'name_required' });
+  const id = `grp-${crypto.randomBytes(6).toString('hex')}`;
+  const group = db.createGroup({
+    id,
+    name,
+    guildIds: Array.isArray(req.body.guildIds) ? req.body.guildIds : [],
+    createdBy: req.user.discord_id,
+  });
+  res.status(201).json({ ...group, memberCount: 0 });
+});
+
+app.put('/api/groups/:id', requireAuth, requireAdmin, (req, res) => {
+  const patch = {};
+  if (req.body && req.body.name != null) patch.name = String(req.body.name);
+  if (req.body && Array.isArray(req.body.guildIds)) patch.guildIds = req.body.guildIds;
+  const group = db.updateGroup(req.params.id, patch);
+  if (!group) return res.status(404).json({ error: 'not_found' });
+  res.json(group);
+});
+
+app.delete('/api/groups/:id', requireAuth, requireAdmin, (req, res) => {
+  if (!db.getGroup(req.params.id)) return res.status(404).json({ error: 'not_found' });
+  db.deleteGroup(req.params.id);
+  res.json({ ok: true });
+});
+
+// Replace the set of groups a user belongs to.
+app.post('/api/users/:id/groups', requireAuth, requireAdmin, (req, res) => {
+  const groupIds = Array.isArray(req.body && req.body.groupIds) ? req.body.groupIds : [];
+  const result = db.setUserGroups(req.params.id, groupIds);
+  res.json({ id: req.params.id, groups: result });
+});
+
+// Add a single member to a group by Discord ID.
+app.post('/api/groups/:id/members', requireAuth, requireAdmin, (req, res) => {
+  const discordId = req.body && req.body.discordId ? String(req.body.discordId).trim() : '';
+  if (!/^\d+$/.test(discordId)) return res.status(400).json({ error: 'discord_id_required' });
+  if (!db.getGroup(req.params.id)) return res.status(404).json({ error: 'not_found' });
+  db.addUserToGroup(discordId, req.params.id);
+  res.status(201).json({ ok: true, discordId, groupId: req.params.id });
+});
+
+app.delete('/api/groups/:id/members/:discordId', requireAuth, requireAdmin, (req, res) => {
+  db.removeUserFromGroup(req.params.discordId, req.params.id);
+  res.json({ ok: true });
 });
 
 /* ---- OAuth: start ------------------------------------------- */
@@ -241,6 +326,7 @@ app.delete('/api/presets/:id', requireAuth, requireAdmin, (req, res) => {
 /* ---- Admin: users ------------------------------------------- */
 app.get('/api/users', requireAuth, requireAdmin, (_req, res) => {
   const online = events.onlineIds();
+  const groupMap = db.groupsByUser();
   const users = db.allUsers().map((u) => {
     const isAdmin = config.isAdmin(u.discord_id);
     return {
@@ -251,6 +337,7 @@ app.get('/api/users', requireAuth, requireAdmin, (_req, res) => {
       isAdmin,
       subscription: getSubscriptionInfo(u, isAdmin),
       online: online.has(u.discord_id),
+      groups: groupMap.get(u.discord_id) || [],
     };
   });
   res.json(users);
@@ -324,6 +411,7 @@ app.get('/api/invites', requireAuth, requireAdmin, (_req, res) => {
       usesLeft: row.uses_left,
       createdBy: row.created_by,
       createdAt: row.created_at,
+      groupId: row.group_id || null,
     }))
   );
 });
@@ -331,17 +419,27 @@ app.get('/api/invites', requireAuth, requireAdmin, (_req, res) => {
 app.post('/api/invites', requireAuth, requireAdmin, (req, res) => {
   const usesLeft = req.body && req.body.usesLeft != null ? Number(req.body.usesLeft) : 1;
   const custom = req.body && req.body.code ? String(req.body.code).trim() : '';
+  const groupId = req.body && req.body.groupId ? String(req.body.groupId) : null;
   const code = custom || crypto.randomBytes(6).toString('hex').toUpperCase();
   if (code.length < 4 || code.length > 32) {
     return res.status(400).json({ error: 'invalid_code' });
+  }
+  if (groupId && !db.getGroup(groupId)) {
+    return res.status(400).json({ error: 'group_not_found' });
   }
   try {
     const row = db.createInviteCode({
       code,
       usesLeft,
       createdBy: req.user.discord_id,
+      groupId,
     });
-    res.status(201).json({ code: row.code, usesLeft: row.uses_left, createdAt: row.created_at });
+    res.status(201).json({
+      code: row.code,
+      usesLeft: row.uses_left,
+      createdAt: row.created_at,
+      groupId: row.group_id || null,
+    });
   } catch {
     res.status(409).json({ error: 'code_exists' });
   }
@@ -363,12 +461,14 @@ app.get('/api/subscription-codes', requireAuth, requireAdmin, (_req, res) => {
       createdBy: row.created_by,
       createdAt: row.created_at,
       used: !!row.used_by,
+      groupId: row.group_id || null,
     }))
   );
 });
 
 app.post('/api/subscription-codes', requireAuth, requireAdmin, (req, res) => {
   const custom = req.body && req.body.code ? String(req.body.code).trim() : '';
+  const groupId = req.body && req.body.groupId ? String(req.body.groupId) : null;
   const code = custom || crypto.randomBytes(8).toString('hex').toUpperCase();
   const durationDays =
     req.body && req.body.durationDays != null
@@ -377,16 +477,21 @@ app.post('/api/subscription-codes', requireAuth, requireAdmin, (req, res) => {
   if (code.length < 4 || code.length > 32) {
     return res.status(400).json({ error: 'invalid_code' });
   }
+  if (groupId && !db.getGroup(groupId)) {
+    return res.status(400).json({ error: 'group_not_found' });
+  }
   try {
     const row = db.createSubscriptionCode({
       code,
       durationDays,
       createdBy: req.user.discord_id,
+      groupId,
     });
     res.status(201).json({
       code: row.code,
       durationDays: row.duration_days,
       createdAt: row.created_at,
+      groupId: row.group_id || null,
     });
   } catch {
     res.status(409).json({ error: 'code_exists' });
@@ -483,7 +588,10 @@ app.listen(config.port, () => {
   console.log(`[westline] redirect URI: ${config.redirectUri}`);
   console.log(`[westline] admins: ${config.adminIds.join(', ') || '(none)'}`);
   console.log(`[westline] invite-only: ${config.inviteOnly}`);
-  console.log(`[westline] channel picker (bot): ${discord.isEnabled() ? 'enabled' : 'disabled'}`);
+  console.log(
+    `[westline] channel picker bots: ${config.discordBotTokens.length} ` +
+      `(${discord.isEnabled() ? 'enabled' : 'disabled'})`
+  );
   console.log(`[westline] subscription required: ${config.subscriptionRequired}`);
   if (config.subscriptionRequired) {
     console.log(`[westline] subscription period: ${config.subscriptionDays} days`);

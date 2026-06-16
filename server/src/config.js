@@ -22,10 +22,9 @@ const config = {
   publicUrl: normalizeUrl(process.env.PUBLIC_URL),
   discordClientId: required('DISCORD_CLIENT_ID'),
   discordClientSecret: required('DISCORD_CLIENT_SECRET'),
-  // Bot token used to enumerate guild channels and create per-channel webhooks
-  // so the desktop app can pick a destination channel. Optional — when empty,
-  // the in-app channel picker is disabled and only manual webhook URLs work.
-  discordBotToken: (process.env.DISCORD_BOT_TOKEN || '').trim(),
+  // When true, a non-admin user with NO group assigned sees no servers in the
+  // picker (fully isolated). When false, an unassigned user sees every server.
+  groupsStrict: process.env.GROUPS_STRICT === 'true',
   jwtSecret: process.env.JWT_SECRET || 'dev-insecure-secret-change-me',
   adminIds: (process.env.ADMIN_IDS || '')
     .split(',')
@@ -53,5 +52,20 @@ const config = {
 config.redirectUri = `${config.publicUrl}/auth/discord/callback`;
 
 config.isAdmin = (discordId) => config.adminIds.includes(String(discordId));
+
+/* ---- Discord bot tokens (channel picker) --------------------
+   Supports one or many bots so different projects can be served by
+   different bots. Add tokens via DISCORD_BOT_TOKENS (comma-separated)
+   and/or the legacy single DISCORD_BOT_TOKEN. To onboard a new project
+   you only drop its bot token here — everything else is configured in
+   the app's admin panel (groups → servers). */
+const botTokens = [];
+function addBotToken(raw) {
+  const v = (raw || '').trim();
+  if (v && !botTokens.includes(v)) botTokens.push(v);
+}
+addBotToken(process.env.DISCORD_BOT_TOKEN);
+(process.env.DISCORD_BOT_TOKENS || '').split(',').forEach(addBotToken);
+config.discordBotTokens = botTokens;
 
 module.exports = config;

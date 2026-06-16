@@ -227,6 +227,147 @@
   gap: 12px;
 }
 
+.admin__hint--warn {
+  color: var(--accent);
+}
+
+/* ---- Group chips (on user rows) ---------------------------- */
+.admin-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.admin-chip {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--bg-input);
+  border: 1px solid var(--line-strong);
+  color: var(--text-dim);
+}
+.admin-chip--accent {
+  border-color: var(--accent-line);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.admin-group__bound {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--line);
+}
+
+/* ---- Groups tab ------------------------------------------- */
+.admin-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.admin-group__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--line);
+}
+.admin-group__name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 700;
+}
+.admin-group__meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.admin-group__section {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+}
+.admin-group__section:first-of-type {
+  border-top: none;
+}
+.admin-guildlist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.admin-guild {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 13px;
+}
+.admin-guild:hover {
+  background: var(--bg-elevated);
+}
+.admin-guild input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.admin-guild__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-group__addmember {
+  display: flex;
+  gap: 8px;
+}
+.admin-group__addmember .ui-input {
+  flex: 1;
+}
+.admin-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+}
+.admin-member img {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bg-input);
+  object-fit: cover;
+  flex: none;
+}
+.admin-member__name {
+  font-size: 13px;
+  flex: none;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-member__id {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  text-align: right;
+}
+
 .admin__toast {
   position: absolute;
   left: 50%;

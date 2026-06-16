@@ -7,6 +7,7 @@ import './admin.css';
 
 const TABS = [
   { id: 'users', label: 'Пользователи' },
+  { id: 'groups', label: 'Группы' },
   { id: 'access', label: 'Доступ' },
   { id: 'presets', label: 'Пресеты' },
   { id: 'broadcast', label: 'Объявление' },
@@ -48,6 +49,34 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
   const [subCodes, setSubCodes] = useState([]);
   const [newWhitelistId, setNewWhitelistId] = useState('');
   const [inviteUses, setInviteUses] = useState('1');
+  const [groups, setGroups] = useState([]);
+  const [allGuilds, setAllGuilds] = useState([]);
+  const [guildsErr, setGuildsErr] = useState('');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [codeGroupId, setCodeGroupId] = useState('');
+  const [memberInputs, setMemberInputs] = useState({});
+
+  const groupName = useCallback(
+    (id) => groups.find((g) => g.id === id)?.name || id,
+    [groups]
+  );
+
+  const guildName = useCallback(
+    (id) => allGuilds.find((g) => g.id === id)?.name || id,
+    [allGuilds]
+  );
+
+  const copyCode = useCallback(
+    async (code) => {
+      try {
+        await navigator.clipboard.writeText(code);
+        flash(`Скопировано: ${code}`);
+      } catch {
+        flash('Не удалось скопировать');
+      }
+    },
+    [flash]
+  );
 
   const flash = useCallback((text) => {
     setToast(text);
@@ -57,9 +86,14 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
   const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const [u, s] = await Promise.all([api('/api/users'), api('/api/stats')]);
+      const [u, s, g] = await Promise.all([
+        api('/api/users'),
+        api('/api/stats'),
+        api('/api/groups'),
+      ]);
       setUsers(u);
       setStats(s);
+      setGroups(g);
     } catch {
       flash('Не удалось загрузить данные');
     } finally {
@@ -70,16 +104,42 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
   const loadAccess = useCallback(async () => {
     setLoading(true);
     try {
-      const [w, i, s] = await Promise.all([
+      const [w, i, s, g] = await Promise.all([
         api('/api/whitelist'),
         api('/api/invites'),
         api('/api/subscription-codes'),
+        api('/api/groups'),
       ]);
       setWhitelist(w);
       setInvites(i);
       setSubCodes(s);
+      setGroups(g);
     } catch {
       flash('Не удалось загрузить доступ');
+    } finally {
+      setLoading(false);
+    }
+  }, [flash]);
+
+  const loadGroups = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [g, u] = await Promise.all([api('/api/groups'), api('/api/users')]);
+      setGroups(g);
+      setUsers(u);
+      try {
+        setAllGuilds(await api('/api/discord/all-guilds'));
+        setGuildsErr('');
+      } catch (e) {
+        setAllGuilds([]);
+        setGuildsErr(
+          e.code === 'bot_not_configured'
+            ? 'Бот не настроен — задайте DISCORD_BOT_TOKEN на хостинге'
+            : e.message || 'Не удалось получить список серверов'
+        );
+      }
+    } catch {
+      flash('Не удалось загрузить группы');
     } finally {
       setLoading(false);
     }
@@ -88,6 +148,7 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
   useEffect(() => {
     if (open) {
       if (tab === 'access') loadAccess();
+      else if (tab === 'groups') loadGroups();
       else loadUsers();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -180,7 +241,7 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
     try {
       const row = await api('/api/invites', {
         method: 'POST',
-        body: { usesLeft: Number(inviteUses) || 1 },
+        body: { usesLeft: Number(inviteUses) || 1, groupId: codeGroupId || null },
       });
       loadAccess();
       flash(`Код: ${row.code}`);
@@ -188,6 +249,68 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
       flash(err.message || 'Не удалось создать код');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const createGroup = async () => {
+    const name = newGroupName.trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      await api('/api/groups', { method: 'POST', body: { name } });
+      setNewGroupName('');
+      loadGroups();
+      flash('Группа создана');
+    } catch (err) {
+      flash(err.message || 'Не удалось создать группу');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeGroup = async (id) => {
+    if (!window.confirm('Удалить группу? Привязки серверов и участники будут очищены.')) return;
+    try {
+      await api(`/api/groups/${id}`, { method: 'DELETE' });
+      loadGroups();
+    } catch {
+      flash('Не удалось удалить группу');
+    }
+  };
+
+  const toggleGroupGuild = async (group, guildId) => {
+    const set = new Set(group.guildIds);
+    if (set.has(guildId)) set.delete(guildId);
+    else set.add(guildId);
+    const guildIds = [...set];
+    setGroups((prev) => prev.map((g) => (g.id === group.id ? { ...g, guildIds } : g)));
+    try {
+      await api(`/api/groups/${group.id}`, { method: 'PUT', body: { guildIds } });
+    } catch {
+      flash('Не удалось сохранить серверы');
+      loadGroups();
+    }
+  };
+
+  const addGroupMember = async (groupId) => {
+    const discordId = (memberInputs[groupId] || '').trim();
+    if (!discordId) return;
+    try {
+      await api(`/api/groups/${groupId}/members`, { method: 'POST', body: { discordId } });
+      setMemberInputs((p) => ({ ...p, [groupId]: '' }));
+      loadGroups();
+      flash('Участник добавлен');
+    } catch (err) {
+      flash(err.message || 'Не удалось добавить');
+    }
+  };
+
+  const removeGroupMember = async (groupId, discordId) => {
+    try {
+      await api(`/api/groups/${groupId}/members/${discordId}`, { method: 'DELETE' });
+      loadGroups();
+    } catch {
+      flash('Не удалось убрать участника');
     }
   };
 
@@ -203,7 +326,10 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
   const createSubCode = async () => {
     setBusy(true);
     try {
-      const row = await api('/api/subscription-codes', { method: 'POST', body: {} });
+      const row = await api('/api/subscription-codes', {
+        method: 'POST',
+        body: { groupId: codeGroupId || null },
+      });
       loadAccess();
       flash(`Код подписки: ${row.code}`);
     } catch (err) {
@@ -299,6 +425,15 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
                       {timeAgo(u.lastSeen)}
                     </span>
                     <span className="admin-user__id">{u.id}</span>
+                    {(u.groups || []).length > 0 && (
+                      <span className="admin-chips">
+                        {u.groups.map((gid) => (
+                          <span key={gid} className="admin-chip">
+                            {groupName(gid)}
+                          </span>
+                        ))}
+                      </span>
+                    )}
                   </div>
                   {!u.isAdmin && (
                     <IconButton
@@ -314,8 +449,146 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
             </div>
           )}
 
+          {tab === 'groups' && (
+            <div className="admin__groups">
+              <div className="admin__create">
+                <Input
+                  label="Название группы"
+                  value={newGroupName}
+                  onChange={setNewGroupName}
+                  placeholder="Например, WESTLINE TEAM"
+                />
+                <p className="admin__hint">
+                  Группа привязывается к серверам Discord. Участники группы видят
+                  в приложении только привязанные серверы. Чтобы добавить новый
+                  проект — закиньте токен его бота в переменную DISCORD_BOT_TOKENS
+                  на хостинге, сервер появится в списке ниже.
+                </p>
+                <Button variant="primary" block onClick={createGroup} disabled={busy}>
+                  {busy ? 'Создание…' : '+ Создать группу'}
+                </Button>
+              </div>
+
+              {guildsErr && <p className="admin__hint admin__hint--warn">{guildsErr}</p>}
+
+              <div className="admin__row-head">
+                <span>Группы ({groups.length})</span>
+                <IconButton title="Обновить" onClick={loadGroups}>
+                  ↻
+                </IconButton>
+              </div>
+              {loading && <p className="admin__hint">Загрузка…</p>}
+              {groups.length === 0 && !loading && (
+                <p className="admin__hint">Групп пока нет. Создайте первую выше.</p>
+              )}
+
+              {groups.map((g) => {
+                const members = users.filter((u) => (u.groups || []).includes(g.id));
+                return (
+                  <div key={g.id} className="admin-group">
+                    <div className="admin-group__head">
+                      <span className="admin-group__name">{g.name}</span>
+                      <span className="admin-group__meta">
+                        {g.guildIds.length} серв. · {members.length} участн.
+                      </span>
+                      <IconButton danger title="Удалить группу" onClick={() => removeGroup(g.id)}>
+                        ✕
+                      </IconButton>
+                    </div>
+
+                    {g.guildIds.length > 0 && (
+                      <div className="admin-group__bound">
+                        {g.guildIds.map((gid) => (
+                          <span key={gid} className="admin-chip admin-chip--accent">
+                            {guildName(gid)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="admin-group__section">
+                      <span className="eyebrow">Серверы группы</span>
+                      {allGuilds.length === 0 && !guildsErr && (
+                        <p className="admin__hint">Серверы не найдены — бот не добавлен ни на один сервер.</p>
+                      )}
+                      <div className="admin-guildlist">
+                        {allGuilds.map((guild) => {
+                          const checked = g.guildIds.includes(guild.id);
+                          return (
+                            <label key={guild.id} className="admin-guild">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleGroupGuild(g, guild.id)}
+                              />
+                              <span className="admin-guild__name">{guild.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="admin-group__section">
+                      <span className="eyebrow">Участники</span>
+                      <div className="admin-group__addmember">
+                        <input
+                          className="ui-input ui-input--mono"
+                          value={memberInputs[g.id] || ''}
+                          placeholder="Discord ID"
+                          onChange={(e) =>
+                            setMemberInputs((p) => ({ ...p, [g.id]: e.target.value }))
+                          }
+                        />
+                        <Button variant="ghost" onClick={() => addGroupMember(g.id)}>
+                          Добавить
+                        </Button>
+                      </div>
+                      {members.length === 0 && (
+                        <p className="admin__hint">Пока никого. Добавьте по Discord ID или выдайте код с группой.</p>
+                      )}
+                      {members.map((m) => (
+                        <div key={m.id} className="admin-member">
+                          <img src={m.avatarUrl} alt="" loading="lazy" />
+                          <span className="admin-member__name">{m.globalName || m.username}</span>
+                          <span className="admin-member__id">{m.id}</span>
+                          <IconButton
+                            danger
+                            title="Убрать из группы"
+                            onClick={() => removeGroupMember(g.id, m.id)}
+                          >
+                            ✕
+                          </IconButton>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {tab === 'access' && (
             <div className="admin__access">
+              <div className="admin__create">
+                <span className="ui-field__label">Группа для новых кодов (необязательно)</span>
+                <select
+                  className="ui-select"
+                  value={codeGroupId}
+                  onChange={(e) => setCodeGroupId(e.target.value)}
+                >
+                  <option value="">— без группы —</option>
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="admin__hint">
+                  Если выбрать группу, то при активации кода пользователь
+                  автоматически попадёт в неё и увидит только её серверы.
+                </p>
+              </div>
+
               <div className="admin__create">
                 <p className="admin__hint">
                   Одноразовый код подписки — 30 дней доступа. После использования код сгорает.
@@ -345,12 +618,18 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
                         : `${row.durationDays} дн. · свободен`}
                       {' · '}
                       {timeAgo(row.createdAt)}
+                      {row.groupId && ` · ${groupName(row.groupId)}`}
                     </span>
                   </div>
                   {!row.used && (
-                    <IconButton danger title="Удалить код" onClick={() => deleteSubCode(row.code)}>
-                      ✕
-                    </IconButton>
+                    <>
+                      <IconButton title="Скопировать код" onClick={() => copyCode(row.code)}>
+                        ⧉
+                      </IconButton>
+                      <IconButton danger title="Удалить код" onClick={() => deleteSubCode(row.code)}>
+                        ✕
+                      </IconButton>
+                    </>
                   )}
                 </div>
               ))}
@@ -412,8 +691,12 @@ export function AdminPanel({ open, onClose, sharedPresets, onReloadPresets, user
                     <span className="admin-preset__name">{row.code}</span>
                     <span className="admin-preset__meta">
                       осталось {row.usesLeft} · {timeAgo(row.createdAt)}
+                      {row.groupId && ` · ${groupName(row.groupId)}`}
                     </span>
                   </div>
+                  <IconButton title="Скопировать код" onClick={() => copyCode(row.code)}>
+                    ⧉
+                  </IconButton>
                   <IconButton danger title="Удалить код" onClick={() => deleteInvite(row.code)}>
                     ✕
                   </IconButton>
